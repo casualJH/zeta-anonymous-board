@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.2.3
+// @version      0.2.4
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.2.3', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.2.4', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -66,6 +66,16 @@
   // The page bridge keeps Zeta authorization in page context. It NEVER sends headers to the userscript UI or Gemini.
   function installBridge(){
     const fn=function(channel){
+      // Explicitly use the real page window. A function called with .call(page)
+      // otherwise still resolves its captured userscript sandbox global.
+      const window=this;
+      const XMLHttpRequest=window.XMLHttpRequest;
+      const Headers=window.Headers;
+      const URL=window.URL;
+      const location=window.location;
+      const document=window.document;
+      const MutationObserver=window.MutationObserver;
+      const AbortController=window.AbortController;
       if(window.__zabPageBridge)return;window.__zabPageBridge=true;
       const origin='https://api.zeta-ai.io', allowed=['authorization','x-client-native-version','x-client-type','x-client-version','x-device-type','x-user-language'];
       let headers={},currentRoom='',base=window.fetch;
@@ -518,7 +528,7 @@
     if(!profileReady()){show('자동 생성 대기 · '+profileSelectionStatus());return;}
     autoStage='generating';generate('auto');
   }
-  window.addEventListener('message',e=>{const m=e.data;if(e.source!==window||m?.tag!=='zab-bridge'||m.channel!==bridgeId)return;if(m.type==='room'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='state'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='messages'&&m.room===room&&m.latest){processMessages(m.messages,true);lastLiveSync=now();}if(m.type==='latestEnd'&&m.room===room)completeAutoCheck(m);if(m.type==='messagesStatus'&&m.room===room){turnLoading=!!m.loading;turnPages=m.pages||0;turnLoadCount=m.count||0;if(!m.loading){turnStatusError=m.error||'';if(m.ok)lastLiveSync=now();else if(m.error)show('메시지 조회 실패 · '+m.error);}renderStatus();}if(m.type==='profile'&&m.room===room&&profileCollectionActive){profileDetection.seen++;profileDetection.lastPath=m.path||'';if(m.path)profileDetection.paths.add(m.path);ingestProfile(m.profile,m.path||'');if(profileWaitTimer&&(profileCache.characters.length||profileCache.users.length))endProfileLoading('프로필 수집됨 · 추가 캐릭터 확인 가능');else updateProfileStatus();}
+  window.addEventListener('message',e=>{const m=e.data;if(e.source!==window||m?.tag!=='zab-bridge'||m.channel!==bridgeId)return;lastBridgeResponse=now();if(m.type==='room'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='state'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='messages'&&m.room===room&&m.latest){processMessages(m.messages,true);lastLiveSync=now();}if(m.type==='latestEnd'&&m.room===room)completeAutoCheck(m);if(m.type==='messagesStatus'&&m.room===room){turnLoading=!!m.loading;turnPages=m.pages||0;turnLoadCount=m.count||0;if(!m.loading){turnStatusError=m.error||'';if(m.ok)lastLiveSync=now();else if(m.error)show('메시지 조회 실패 · '+m.error);}renderStatus();}if(m.type==='profile'&&m.room===room&&profileCollectionActive){profileDetection.seen++;profileDetection.lastPath=m.path||'';if(m.path)profileDetection.paths.add(m.path);ingestProfile(m.profile,m.path||'');if(profileWaitTimer&&(profileCache.characters.length||profileCache.users.length))endProfileLoading('프로필 수집됨 · 추가 캐릭터 확인 가능');else updateProfileStatus();}
     if(m.type==='profileComplete'&&m.room===room&&profileCollectionActive){const extra=m.errors?.length?' ('+m.errors.join(' / ').slice(0,160)+')':'';endProfileLoading('수집 완료'+(m.partial?' · 일부 요청 실패':'')+extra);}
     if(m.type==='profileError'&&profileCollectionActive&&(!m.room||m.room===room)){profileDetection.apiError=m.message||'프로필 수집 실패';endProfileLoading(m.message||'프로필 수집 실패');}
     if(m.type==='error')show(m.message);});
@@ -829,9 +839,11 @@
     if(list)list.textContent=profileSelectionStatus();
     renderStatus();
   }
-  let lastLatestRequest=0;
+  let lastLatestRequest=0,lastBridgeResponse=0;
   function requestLatest(){if(!room||loadBusy)return;loadBusy=true;lastLatestRequest=now();bridge('latest');setTimeout(()=>{loadBusy=false;},2200);}
-  let lastBridgeStateAsk=0;const runner=setInterval(()=>{if(!document.body)return;const m=/\/rooms\/([0-9a-f-]{36})(?:[/?#]|$)/i.exec(location.pathname);if(m)setRoom(m[1]);if(now()-lastBridgeStateAsk>6000){lastBridgeStateAsk=now();bridge('state');}if(!room||!data)return;if(now()-lastLatestRequest>8000)requestLatest();if(!panel)mount();},2000);
+  let lastBridgeStateAsk=0;const runner=setInterval(()=>{if(!document.body)return;const m=/\/rooms\/([0-9a-f-]{36})(?:[/?#]|$)/i.exec(location.pathname);if(m)setRoom(m[1]);if(now()-lastBridgeStateAsk>6000){lastBridgeStateAsk=now();bridge('state');}if(!room||!data)return;if(now()-lastLatestRequest>8000)requestLatest();
+    if(completedTurnTotal===null&&now()-lastLatestRequest>3500&&lastBridgeResponse===0)turnStatusError='제타 API 연결 응답 없음 · 채팅방 새로고침 필요';
+    if(!panel)mount();else renderStatus();},2000);
   function saveSettings(){if(!data)return;data.settings.turns=num(data.settings.turns,1,999,1);saved();render();}
   function communityChange(id){if(!data)return;if(data.settings.selected===id)return;invalidatePending('커뮤니티를 변경했어요.');runEpoch++;turnCount=0;data.settings.selected=id;postsView='list';detailId='';saved();render();}
   function toggleAuto(on){if(!data)return;invalidatePending('');runEpoch++;turnCount=0;data.settings.auto=on;saveSettings();show('자동 갱신 '+(on?'ON':'OFF')+' · 0턴부터 시작');}
@@ -1023,5 +1035,5 @@
   window.addEventListener('resize',applySize);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
   // Only expose non-sensitive diagnostic information. Authentication never leaves the Zeta page bridge.
-  window.zetaAnonymousBoardDiagnostics=()=>({version:VERSION,room,turnCount,turns:observedTurns.length,auto:!!data?.settings.auto,community:data?.settings.selected,busy:!!busy,profileCandidates:{users:profileCache.users.length,characters:profileCache.characters.length},profileChosen:profileSelection().valid,started:!!data?.boards?.[data?.settings?.selected]?.started,baselineReady,seenTurns:seenTurnIds.size,activeTurnKey,turnEvents,autoStage,lastLiveSync,lastLatestRequest,turnMessagesSeen,turnPages,turnStatusError,turnLoading,turnLoadCount,lastTurnAnchor,completedTurnTotal});
+  window.zetaAnonymousBoardDiagnostics=()=>({version:VERSION,room,turnCount,turns:observedTurns.length,auto:!!data?.settings.auto,community:data?.settings.selected,busy:!!busy,profileCandidates:{users:profileCache.users.length,characters:profileCache.characters.length},profileChosen:profileSelection().valid,started:!!data?.boards?.[data?.settings?.selected]?.started,baselineReady,seenTurns:seenTurnIds.size,activeTurnKey,turnEvents,autoStage,lastLiveSync,lastLatestRequest,turnMessagesSeen,turnPages,turnStatusError,turnLoading,turnLoadCount,lastTurnAnchor,completedTurnTotal,lastBridgeResponse});
 })();
