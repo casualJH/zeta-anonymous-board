@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.1.5
+// @version      0.1.6
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.1.5', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.1.6', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -173,16 +173,42 @@
     profileInfo=message;
     updateProfileStatus();
   }
+  function importMobProfiles(){
+    // zeta-profiles-mob exposes a safe read-only snapshot. It provides the
+    // current user and primary character, not the entire multi-character cast.
+    let snapshot;
+    try{snapshot=page.zetaCurrentProfiles?.get?.();}catch{return false;}
+    if(!snapshot||snapshot.roomId!==room)return false;
+    const before=profileCache.characters.length+(profileCache.user?1:0);
+    ingestProfile({characters:[snapshot.character].filter(Boolean),userProfile:snapshot.user});
+    const after=profileCache.characters.length+(profileCache.user?1:0);
+    if(after){
+      if(profileWaitTimer){
+        // Do not keep showing 'loading' once actual data is available; the
+        // independent Zeta API bridge can still enrich all other characters.
+        endProfileLoading('프로필 연결됨 · 추가 캐릭터 확인 중');
+      } else if(!profileInfo.startsWith('수집 완료')&&!profileInfo.startsWith('프로필 연결됨')){
+        profileInfo='프로필 연결됨 · 추가 캐릭터 확인 가능';
+      }
+      updateProfileStatus();
+    }
+    return after>before;
+  }
   function requestProfiles(){
     if(!room)return show('제타 채팅방을 먼저 열어 주세요.');
     const attempt=++profileAttempt,forRoom=room;
-    clearTimeout(profileWaitTimer);
-    profileInfo='프로필을 불러오는 중…';updateProfileStatus();
-    // A missing bridge message must never leave the interface permanently loading.
+    clearTimeout(profileWaitTimer);profileWaitTimer=null;
+    importMobProfiles();
+    const already=profileCache.characters.length+(profileCache.user?1:0);
+    profileInfo=already?'프로필 '+already+'개 확인 · 추가 캐릭터 확인 중':'프로필 확인 중…';
+    updateProfileStatus();
+    // Independent deadline, even when Safari loses bridge completion events.
     profileWaitTimer=setTimeout(()=>{
       if(attempt!==profileAttempt||room!==forRoom)return;
-      endProfileLoading('요청 시간 초과 · 수집된 정보만 표시해요. 채팅방을 새로고침하고 다시 시도하세요.');
-    },28000);
+      importMobProfiles();
+      const count=profileCache.characters.length+(profileCache.user?1:0);
+      endProfileLoading(count?'확인 완료 · 수집된 프로필 '+count+'개 (추가 응답 없음)':'프로필 요청 시간 초과 · 모브 프로필을 열고 다시 시도하세요.');
+    },10000);
     bridge('profiles');
   }
   function currentBoard(){if(!data)return blankBoard();const id=data.settings.selected;if(!data.boards[id])data.boards[id]=blankBoard();return data.boards[id];}
@@ -215,7 +241,7 @@
   function invalidatePending(reason){clearTimeout(autoTimer);autoTimer=null;cancelBusy(false);const b=currentBoard();if(b.lastBatch?.temporary){rollback(b.lastBatch);b.lastBatch=null;saved();}if(reason)show(reason);}
   function rollback(batch){if(!batch||!data)return;const board=currentBoard();board.posts=board.posts.filter(p=>!batch.created.includes(p.id));for(const p of board.posts){p.comments=p.comments.filter(c=>!batch.comments.includes(c.id));for(const c of p.comments)c.replies=c.replies.filter(r=>!batch.comments.includes(r.id));const old=batch.metrics?.[p.id];if(old){p.views=old.views;p.likes=old.likes;}}board.unread=Math.max(0,board.unread-(batch.created?.length||0));}
   function scheduleAuto(key,hash){clearTimeout(autoTimer);if(busy||!data?.settings.auto||!currentBoard().started)return;show('게시글 생성 대기 중');const epoch=runEpoch,roomAt=room,comm=data.settings.selected;autoTimer=setTimeout(async()=>{if(epoch!==runEpoch||roomAt!==room||comm!==data?.settings.selected)return;bridge('latest');setTimeout(()=>{if(epoch!==runEpoch||key!==activeTurnKey||hash!==activeTurnHash||busy||!data?.settings.auto)return;generate('auto');},900);},15000);}
-  window.addEventListener('message',e=>{const m=e.data;if(e.source!==window||m?.tag!=='zab-bridge'||m.channel!==bridgeId)return;if(m.type==='room'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='state'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='messages'&&m.room===room){processMessages(m.messages,!!m.latest);lastLiveSync=now();}if(m.type==='profile'&&m.room===room){ingestProfile(m.profile);updateProfileStatus();}
+  window.addEventListener('message',e=>{const m=e.data;if(e.source!==window||m?.tag!=='zab-bridge'||m.channel!==bridgeId)return;if(m.type==='room'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='state'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='messages'&&m.room===room){processMessages(m.messages,!!m.latest);lastLiveSync=now();}if(m.type==='profile'&&m.room===room){ingestProfile(m.profile);if(profileWaitTimer&&(profileCache.characters.length||profileCache.user))endProfileLoading('프로필 수집됨 · 추가 캐릭터 확인 가능');else updateProfileStatus();}
     if(m.type==='profileComplete'&&m.room===room){const extra=m.errors?.length?' ('+m.errors.join(' / ').slice(0,160)+')':'';endProfileLoading('수집 완료'+(m.partial?' · 일부 요청 실패':'')+extra);}
     if(m.type==='profileError'&&(!m.room||m.room===room)){endProfileLoading(m.message||'프로필 수집 실패');}
     if(m.type==='error')show(m.message);});
@@ -223,7 +249,8 @@
   // Ask for the current bridge state after registering the listener, and periodically
   // retry state discovery for SPA navigation / missed Safari events.
   queueMicrotask(()=>bridge('state'));
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)bridge('state');});
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden){bridge('state');importMobProfiles();}});
+  window.addEventListener('zeta-current-profiles-updated',()=>{importMobProfiles();});
   function profileItem(raw,allowUserName=false){
     if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
     const name=short(raw.name||raw.displayName||raw.display_name||raw.nickname||raw.title||'',160);
@@ -274,7 +301,7 @@
     if(list)list.textContent=profileCache.characters.length?profileCache.characters.map(p=>p.name||'(이름 없음)').join(', '):'확인된 캐릭터가 없습니다.';
   }
   function requestLatest(){if(!room||loadBusy)return;loadBusy=true;bridge('latest');setTimeout(()=>{loadBusy=false;},1700);}
-  let lastBridgeStateAsk=0;const runner=setInterval(()=>{if(!document.body)return;const m=/\/rooms\/([0-9a-f-]{36})(?:[/?#]|$)/i.exec(location.pathname);if(m)setRoom(m[1]);if(now()-lastBridgeStateAsk>6000){lastBridgeStateAsk=now();bridge('state');}if(!room||!data)return;try{const p=page.zetaCurrentProfiles?.get?.();if(p){ingestProfile({characters:[p.character,...safeArray(p.characters)].filter(Boolean),userProfile:p.user});updateProfileStatus();}}catch{}if(now()-lastLiveSync>6500)requestLatest();if(!panel)mount();},2000);
+  let lastBridgeStateAsk=0;const runner=setInterval(()=>{if(!document.body)return;const m=/\/rooms\/([0-9a-f-]{36})(?:[/?#]|$)/i.exec(location.pathname);if(m)setRoom(m[1]);if(now()-lastBridgeStateAsk>6000){lastBridgeStateAsk=now();bridge('state');}if(!room||!data)return;try{importMobProfiles();}catch{}if(now()-lastLiveSync>6500)requestLatest();if(!panel)mount();},2000);
   function saveSettings(){if(!data)return;data.settings.turns=num(data.settings.turns,1,999,1);saved();render();}
   function communityChange(id){if(!data)return;if(data.settings.selected===id)return;invalidatePending('커뮤니티를 변경했어요.');runEpoch++;turnCount=0;data.settings.selected=id;postsView='list';detailId='';saved();render();}
   function toggleAuto(on){if(!data)return;invalidatePending('');runEpoch++;turnCount=0;data.settings.auto=on;saveSettings();show('자동 갱신 '+(on?'ON':'OFF')+' · 0턴부터 시작');}
