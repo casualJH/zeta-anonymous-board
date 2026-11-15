@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.1.10
+// @version      0.1.11
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.1.10', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.1.11', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -40,7 +40,7 @@
     {id:'x',name:'X',desc:'짧은 글, 실시간 화제와 반응',nick:'@handle',style:'짧고 속도감 있는 SNS 말투'},
     {id:'neighborhood',name:'동네 게시판',desc:'동네 생활, 목격담과 지역 정보',nick:'동네산책러, 이웃주민',style:'주민 카페 말투'}
   ];
-  const defaults=()=>({auto:true,turns:1,posts:3,newComments:7,oldComments:10,oldPostWindow:20,quiet:'daily',model:'gemini-3.5-flash-lite',fallback:'gemini-3.1-flash-lite',temperature:0.9,guide:'',userNickMode:'auto',userNick:'',selected:'everytime',custom:[],status:'',profiles:{user:'',characters:'',world:''},profileSelection:{userId:'',characterIds:[]}});
+  const defaults=()=>({auto:true,turns:1,posts:3,newComments:7,oldComments:10,oldPostWindow:20,quiet:'daily',model:'gemini-3.5-flash-lite',fallback:'gemini-3.1-flash-lite',temperature:0.9,guide:'',userNickMode:'auto',userNick:'',selected:'everytime',custom:[],status:'',profiles:{user:'',characters:'',world:''},profileSelection:{userId:'',characterIds:[]},savedProfiles:null});
   const now=()=>Date.now(), uid=()=> (crypto.randomUUID?.()||'id-'+now().toString(36)+'-'+Math.random().toString(36).slice(2));
   const num=(x,min,max,d)=>{const n=Number(x);return Number.isFinite(n)?Math.max(min,Math.min(max,Math.trunc(n))):d;};
   const copy=x=>JSON.parse(JSON.stringify(x));
@@ -58,6 +58,7 @@
   function blankBoard(){return {posts:[],residents:{},sort:'recent',started:false,seen:{},lastBatch:null,unread:0};}
   let room='',data=null,postsView='list',detailId='',settingsOpen=false,profilePanelOpen=false,settingTab='basic',panel=null,launcher=null,notice='',noticeUntil=0;
   let busy=null,pending=null,turnCount=0,activeTurnKey='',activeTurnHash='',lastTurnKeys=[],baselineReady=false,autoTimer=null,latestTimer=null,loadBusy=false,lastLiveSync=0,runEpoch=0, pendingAutoCheck=null;
+  let profileCollectionActive=false, profileDraftSelection={userId:'',characterIds:[]};
   let profileCache={characters:[],users:[],plot:null}, profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''}, profileInfo='프로필 연결 대기 중', profileRequestRoom='', profileWaitTimer=null,profileAttempt=0, captured=null, networkRoom='',roomMarker='';
   const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
   const bridgeId='zab-'+Math.random().toString(36).slice(2);
@@ -217,7 +218,17 @@
   }
   installBridge();
   function bridge(action,requestId=''){window.postMessage({tag:'zab-control',channel:bridgeId,action,requestId},'*');}
-  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];baselineReady=false;independentProfileCollector.roomChanged();room=id;postsView='list';detailId='';profilePanelOpen=false;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='프로필 연결 대기 중';profileRequestRoom='';try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};if(!data.settings.fallbackPreferenceV014){if(!data.settings.fallback)data.settings.fallback='gemini-3.1-flash-lite';data.settings.fallbackPreferenceV014=true;saved();}if(['apartment','dating'].includes(data.settings.selected))data.settings.selected='everytime';render();setTimeout(()=>{if(room!==id)return;bridge('state');bridge('latest');requestProfiles();profileRequestRoom=id;},650);}
+  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];baselineReady=false;independentProfileCollector.roomChanged();room=id;postsView='list';detailId='';profilePanelOpen=false;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='저장된 프로필 확인 중';profileRequestRoom='';profileCollectionActive=false;profileDraftSelection={userId:'',characterIds:[]};try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};
+    // Only a confirmed snapshot may be used after a reload. Old versions stored IDs
+    // but not source content, so those users must import and save once.
+    const snapshot=data.settings.savedProfiles;
+    if(snapshot?.user&&safeArray(snapshot.characters).length){
+      const storedUser=copy(snapshot.user),storedChars=copy(snapshot.characters);
+      profileCache={users:[storedUser],characters:storedChars,plot:null};
+      profileDraftSelection={userId:profileKey(storedUser),characterIds:storedChars.map(profileKey)};
+      profileInfo='저장된 프로필 불러옴 · 자동 재감지 안 함';
+    }else{profileInfo='저장된 프로필 없음 · 불러오기 → 수정 → 저장';}
+    if(!data.settings.fallbackPreferenceV014){if(!data.settings.fallback)data.settings.fallback='gemini-3.1-flash-lite';data.settings.fallbackPreferenceV014=true;saved();}if(['apartment','dating'].includes(data.settings.selected))data.settings.selected='everytime';render();setTimeout(()=>{if(room!==id)return;bridge('state');bridge('latest');profileRequestRoom=id;},650);}
   function endProfileLoading(message){
     clearTimeout(profileWaitTimer);profileWaitTimer=null;
     profileInfo=message;
@@ -225,6 +236,11 @@
   }
   function requestProfiles(){
     if(!room)return show('제타 채팅방을 먼저 열어 주세요.');
+    if(profileCollectionActive&&profileWaitTimer)return show('프로필 불러오기가 이미 진행 중이에요.');
+    if(data?.settings.savedProfiles&&!confirm('제타에서 프로필을 다시 불러올까요?\n저장된 프로필은 저장 버튼을 누르기 전까지 변경되지 않습니다.'))return;
+    profileCollectionActive=true;
+    profileCache={characters:[],users:[],plot:null};
+    profileDraftSelection={userId:'',characterIds:[]};
     const attempt=++profileAttempt,forRoom=room;
     clearTimeout(profileWaitTimer);profileWaitTimer=null;
     const already=profileCache.characters.length+profileCache.users.length;
@@ -324,9 +340,9 @@
     if(!profileReady()){show('자동 생성 대기 · '+profileSelectionStatus());return;}
     generate('auto');
   }
-  window.addEventListener('message',e=>{const m=e.data;if(e.source!==window||m?.tag!=='zab-bridge'||m.channel!==bridgeId)return;if(m.type==='room'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='state'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='messages'&&m.room===room){processMessages(m.messages,!!m.latest);lastLiveSync=now();}if(m.type==='latestEnd'&&m.room===room)completeAutoCheck(m);if(m.type==='profile'&&m.room===room){profileDetection.seen++;profileDetection.lastPath=m.path||'';if(m.path)profileDetection.paths.add(m.path);ingestProfile(m.profile,m.path||'');if(profileWaitTimer&&(profileCache.characters.length||profileCache.users.length))endProfileLoading('프로필 수집됨 · 추가 캐릭터 확인 가능');else updateProfileStatus();}
-    if(m.type==='profileComplete'&&m.room===room){const extra=m.errors?.length?' ('+m.errors.join(' / ').slice(0,160)+')':'';endProfileLoading('수집 완료'+(m.partial?' · 일부 요청 실패':'')+extra);}
-    if(m.type==='profileError'&&(!m.room||m.room===room)){profileDetection.apiError=m.message||'프로필 수집 실패';endProfileLoading(m.message||'프로필 수집 실패');}
+  window.addEventListener('message',e=>{const m=e.data;if(e.source!==window||m?.tag!=='zab-bridge'||m.channel!==bridgeId)return;if(m.type==='room'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='state'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='messages'&&m.room===room){processMessages(m.messages,!!m.latest);lastLiveSync=now();}if(m.type==='latestEnd'&&m.room===room)completeAutoCheck(m);if(m.type==='profile'&&m.room===room&&profileCollectionActive){profileDetection.seen++;profileDetection.lastPath=m.path||'';if(m.path)profileDetection.paths.add(m.path);ingestProfile(m.profile,m.path||'');if(profileWaitTimer&&(profileCache.characters.length||profileCache.users.length))endProfileLoading('프로필 수집됨 · 추가 캐릭터 확인 가능');else updateProfileStatus();}
+    if(m.type==='profileComplete'&&m.room===room&&profileCollectionActive){const extra=m.errors?.length?' ('+m.errors.join(' / ').slice(0,160)+')':'';endProfileLoading('수집 완료'+(m.partial?' · 일부 요청 실패':'')+extra);}
+    if(m.type==='profileError'&&profileCollectionActive&&(!m.room||m.room===room)){profileDetection.apiError=m.message||'프로필 수집 실패';endProfileLoading(m.message||'프로필 수집 실패');}
     if(m.type==='error')show(m.message);});
   // The injected bridge can announce its initial room before our message listener exists.
   // Ask for the current bridge state after registering the listener, and periodically
@@ -335,7 +351,7 @@
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)bridge('state');});
   // Identifiers for explicit user choices remain stable across reloads.
   // A display-name fallback is used only if Zeta omits a profile ID.
-  function profileKey(p){return p.id?'id:'+p.id:'name:'+p.name;}
+  function profileKey(p){return p._key||(p.id?'id:'+p.id:'name:'+p.name);}
   function profileItem(raw,allowUserName=false){
     if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
     const obj=raw.profile||raw.persona||raw.userPersona||raw.data||raw;
@@ -412,7 +428,7 @@
       }catch{}
     }
     function note(path,payload){
-      if(!path)return;
+      if(!profileCollectionActive||!path)return;
       profileDetection.seen++;
       profileDetection.lastPath=path;
       profileDetection.paths.add(path);
@@ -436,7 +452,7 @@
       if(profilePanelOpen)render();
     }
     function process(path,payload,status,forRoom,epoch){
-      if(epoch!==generation||!path||status<200||status>=300)return;
+      if(!profileCollectionActive||epoch!==generation||!path||status<200||status>=300)return;
       const scoped=roomOf(path);
       if(!room||scoped&&scoped!==room||forRoom&&forRoom!==room)return;
       // Zeta's room detail, plot, and persona response can each arrive independently.
@@ -455,7 +471,7 @@
       }).catch(()=>{});
     }
     function collectVisibleDescription(){
-      if(!room||!document.body)return;
+      if(!profileCollectionActive||!room||!document.body)return;
       const known=profileCache.characters;
       // This is the exact modal traversal pattern used by the working profile script.
       for(const title of document.querySelectorAll('h3,[role="heading"]')){
@@ -520,9 +536,10 @@
         scanSoon();
       };
       if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',begin,{once:true});else begin();
-      profileInfo='독립 감지 시작됨 · 제타 프로필 응답 대기 중';
+      // Passive hooks remain installed, but do not collect or change profiles until requested.
     }
     async function refresh(){
+      if(!profileCollectionActive)return;
       if(!room)return endProfileLoading('채팅방을 먼저 연결하세요.');
       if(pendingRefresh)return;
       pendingRefresh=true;
@@ -573,39 +590,64 @@
   independentProfileCollector.install();
 
   function profileSelection(){
-    const raw=data?.settings.profileSelection||{};
-    const users=profileCache.users,characters=profileCache.characters;
-    const user=users.find(p=>profileKey(p)===raw.userId)||null;
-    const selectedIds=new Set(safeArray(raw.characterIds));
-    const chars=characters.filter(p=>selectedIds.has(profileKey(p)));
-    return {user,characters:chars,valid:!!user&&chars.length>0};
+    const snapshot=data?.settings?.savedProfiles;
+    const user=snapshot?.user&&typeof snapshot.user==='object'?snapshot.user:null;
+    const chars=safeArray(snapshot?.characters).filter(p=>p&&typeof p.name==='string'&&p.name.trim());
+    return {user,characters:chars,valid:!!user&&!!String(user.name||'').trim()&&chars.length>0};
   }
   function profileSelectionStatus(){
     if(!data)return '채팅방 연결 대기 중';
-    const selection=profileSelection();
-    const raw=data.settings.profileSelection||{};
-    if(!selection.user)return profileCache.users.length?'유저 프로필을 직접 선택하세요.':'유저 프로필 미감지 · 제타에서 유저 프로필을 확인하세요.';
-    if(!selection.characters.length)return profileCache.characters.length?'캐릭터를 1명 이상 직접 선택하세요.':'캐릭터 프로필 미감지 · 불러오기를 눌러 주세요.';
-    if(safeArray(raw.characterIds).length!==selection.characters.length)return '선택했던 캐릭터가 일부 감지되지 않았어요. 다시 선택해 주세요.';
-    return '유저 1명 · 캐릭터 '+selection.characters.length+'명 선택 완료';
+    const chosen=profileSelection();
+    return chosen.valid?'저장 완료 · 유저 1명 · 캐릭터 '+chosen.characters.length+'명':
+      '프로필 미저장 · 👤에서 불러오기 → 수정 → 저장 필요';
   }
-  function profileReady(){const selection=profileSelection(),raw=data?.settings.profileSelection||{};return selection.valid&&safeArray(raw.characterIds).length===selection.characters.length;}
+  function profileReady(){return profileSelection().valid;}
+  // Draft changes never influence Gemini until the user explicitly saves them.
+  function saveProfileDraft(){
+    if(!data)return;
+    const user=profileCache.users.find(p=>profileKey(p)===profileDraftSelection.userId);
+    const ids=new Set(safeArray(profileDraftSelection.characterIds));
+    const chars=profileCache.characters.filter(p=>ids.has(profileKey(p)));
+    if(!user)return show('저장할 유저 프로필 1개를 선택해 주세요.');
+    if(!chars.length)return show('저장할 캐릭터 프로필을 1명 이상 선택해 주세요.');
+    if(!String(user.name||'').trim()||chars.some(p=>!String(p.name||'').trim()))return show('프로필 이름을 입력해 주세요.');
+    const clean=p=>({id:short(p.id,120),name:short(p.name,160),description:short(p.description,16000),_key:profileKey(p)});
+    data.settings.savedProfiles={user:clean(user),characters:chars.map(clean),savedAt:now()};
+    data.settings.profileSelection={userId:profileKey(user),characterIds:chars.map(profileKey)};
+    profileCollectionActive=false;
+    clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;
+    runEpoch++;invalidatePending('');turnCount=0;
+    profileInfo='프로필 저장 완료 · 자동 재감지 안 함';
+    saved();render();show('현재 채팅방에 프로필 원문을 저장했어요.');
+  }
+  function discardProfileDraft(){
+    profileCollectionActive=false;clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;
+    const saved=data?.settings.savedProfiles;
+    profileCache=saved?.user?{users:[copy(saved.user)],characters:copy(safeArray(saved.characters)),plot:null}:{users:[],characters:[],plot:null};
+    profileDraftSelection=saved?.user?{userId:profileKey(saved.user),characterIds:safeArray(saved.characters).map(profileKey)}:{userId:'',characterIds:[]};
+    profileInfo=saved?.user?'저장된 프로필 복원':'저장된 프로필 없음';render();
+  }
   function renderProfileChoices(){
-    const selection=data.settings.profileSelection;
+    const selected=profileDraftSelection;
     const userOptions=[['','-- 유저 프로필 선택 필수 --'],...profileCache.users.map(p=>[profileKey(p),p.name+(p.description?' · 설명 있음':'')])];
+    const user=profileCache.users.find(p=>profileKey(p)===selected.userId);
+    const userEditor=user?`<div class="zab-section"><label>유저 이름 수정</label><input data-profile-edit="user" data-profile-field="name" value="${esc(user.name)}" maxlength="160"><label>유저 설명 수정</label><textarea data-profile-edit="user" data-profile-field="description" rows="5">${esc(user.description)}</textarea></div>`:'';
     const charRows=profileCache.characters.map(p=>{
-      const id=profileKey(p),checked=safeArray(selection.characterIds).includes(id);
-      return `<label class="zab-profile-choice"><input type="checkbox" data-profile-character="${esc(id)}" ${checked?'checked':''}><span><strong>${esc(p.name)}</strong><small>${esc(short(p.description,100)||'설명 미확인')}</small></span></label>`;
+      const id=profileKey(p),checked=safeArray(selected.characterIds).includes(id);
+      return `<div class="zab-section"><label class="zab-profile-choice"><input type="checkbox" data-profile-character="${esc(id)}" ${checked?'checked':''}><strong>${esc(p.name)}</strong></label>
+        ${checked?`<label>캐릭터 이름 수정</label><input data-profile-edit="character" data-profile-id="${esc(id)}" data-profile-field="name" value="${esc(p.name)}" maxlength="160">
+        <label>캐릭터 설명 수정</label><textarea data-profile-edit="character" data-profile-id="${esc(id)}" data-profile-field="description" rows="5">${esc(p.description)}</textarea>`:`<p class="zab-note">${esc(short(p.description,180)||'설명 미확인')}</p>`}</div>`;
     }).join('');
-    return `<label>Gemini에 전달할 유저 프로필 (필수 · 1개)</label>${selectionForProfile(userOptions,selection.userId)}
+    return `<label>Gemini에 전달할 유저 프로필 (필수 · 1개)</label>${selectionForProfile(userOptions,selected.userId)}${userEditor}
       <label>Gemini에 전달할 캐릭터 프로필 (필수 · 1명 이상)</label>
-      ${charRows||'<p class="zab-note">아직 감지된 캐릭터가 없어요. 제타 채팅방에서 프로필을 확인하고 다시 불러오세요.</p>'}
-      <p class="zab-note" id="zab-profile-selection-status">${esc(profileSelectionStatus())}</p>`;
+      ${charRows||'<p class="zab-note">저장된 프로필이 없어요. 불러오기 버튼으로 가져오세요.</p>'}
+      <p class="zab-note">편집 내용은 아래 저장 버튼을 눌러야 적용됩니다. 기존 저장본은 그전까지 유지돼요.</p>
+      <div class="zab-row">${btn('save-profiles','프로필 저장','zab-primary')}${btn('discard-profiles','수정 취소')}</div>`;
   }
   function selectionForProfile(opts,current){return `<select data-profile-user="yes">${opts.map(([id,label])=>`<option value="${esc(id)}" ${id===current?'selected':''}>${esc(label)}</option>`).join('')}</select>`;}
   function updateProfileStatus(){
     const el=panel?.querySelector('#zab-profile-status');
-    if(el)el.textContent=`${profileInfo} · 캐릭터 ${profileCache.characters.length}명 · 유저 후보 ${profileCache.users.length}개`;
+    if(el)el.textContent=`${profileInfo} · ${profileSelectionStatus()} · 불러온 후보 캐릭터 ${profileCache.characters.length}명 · 유저 ${profileCache.users.length}개`;
     const list=panel?.querySelector('#zab-profile-selection-status');
     if(list)list.textContent=profileSelectionStatus();
     renderStatus();
@@ -753,11 +795,11 @@
   function renderProfilePanel(){
     const profiles=data?.settings?.profiles||{};
     return `${btn('profiles-back','← 게시판으로')}<h3>👤 프로필 감지·선택</h3>
-      <p class="zab-note">다른 유저스크립트와 연결하지 않아요. 제타의 실제 API 응답과 캐릭터 상세 화면에서 직접 수집해요.</p>
-      <div class="zab-row">${btn('refresh-profiles','제타 프로필 다시 감지','zab-primary')}</div>
-      <p class="zab-note" id="zab-profile-status">${esc(profileInfo)} · 캐릭터 ${profileCache.characters.length}명 · 유저 후보 ${profileCache.users.length}개</p>
+      <p class="zab-note">채팅방별로 프로필 원문을 저장합니다. 자동 감지·자동 덮어쓰기는 하지 않으며, 직접 불러오기·수정·저장을 선택하세요.</p>
+      <div class="zab-row">${btn('refresh-profiles','제타 프로필 불러오기','zab-primary')}</div>
+      <p class="zab-note" id="zab-profile-status">${esc(profileInfo)} · ${esc(profileSelectionStatus())} · 불러온 후보 캐릭터 ${profileCache.characters.length}명 · 유저 ${profileCache.users.length}개</p>
       ${renderProfileChoices()}
-      ${!profileCache.characters.length&&!profileCache.users.length?`<p class="zab-note">아직 감지되지 않았어요. 제타의 유저 프로필 선택 화면과 캐릭터 상세 화면을 열어 프로필 응답을 발생시킨 다음, 이 화면에서 다시 감지해 주세요.</p>`:''}
+      ${!profileCache.characters.length&&!profileCache.users.length?`<p class="zab-note">저장된 프로필이 없어요. 불러오기를 눌러 제타에서 가져온 뒤 수정하고 저장하세요.</p>`:''}
       <p class="zab-note">진단: 제타 프로필 응답 ${profileDetection.seen}회 · 마지막 경로 ${esc(profileDetection.lastPath||'없음')} · 독립 감시 ${independentProfileCollector.diagnostics().installed?'동작':'실패'} · 인증 ${independentProfileCollector.diagnostics().authorized?'감지':'대기'}</p>
       <div class="zab-divider"></div><h4>수동 정보 보완</h4>
       <label>세계관 설정·배경</label>${ta('profiles.world',profiles.world||'',4)}
@@ -771,22 +813,35 @@
   settingTab==='community'?`<h4>커뮤니티 관리</h4><label>현재 커뮤니티</label>${selection('selected',s.selected,[...presets,...s.custom].map(x=>[x.id,x.name]))}<p class="zab-note">커뮤니티를 변경해도 게시글·주민 기록은 보존되고 자동 갱신은 0턴부터 다시 시작합니다.</p><h4>사용자 지정 커뮤니티 만들기</h4><label>이름</label><input id="zab-custom-name" placeholder="예: 우리 학교 대나무숲"><label>소개·분위기</label><textarea id="zab-custom-desc" rows="3"></textarea><label>닉네임 형식</label><input id="zab-custom-nick" placeholder="예: 익명, ㅇㅇ, 동네산책러"><label>말투 지침</label><textarea id="zab-custom-style" rows="3"></textarea>${btn('add-custom','커뮤니티 추가','zab-primary')}<h4 style="margin-top:18px">사용자 지정 커뮤니티</h4>${s.custom.length?s.custom.map(c=>`<div class="zab-flex zab-section"><span>${esc(c.name)}</span>${btn('edit-custom:'+c.id,'수정')}${btn('remove-custom:'+c.id,'삭제')}</div>`).join(''):'<p class="zab-note">아직 추가한 커뮤니티가 없어요.</p>'}`:
   settingTab==='people'?`<h4>내 닉네임</h4>${selection('userNickMode',s.userNickMode,[['auto','커뮤니티별 자동 부여'],['custom','직접 설정']])}<label>직접 사용할 닉네임</label>${inp('userNick',s.userNick)}<p class="zab-note">변경한 닉네임은 이후 작성하는 글부터 적용합니다.</p><h4>고정 주민 닉네임 수정</h4>${Object.values(currentBoard().residents).length?Object.values(currentBoard().residents).map(r=>`<div class="zab-flex"><span style="font-size:11px;max-width:100px;overflow-wrap:anywhere">${esc(r.id)}</span><input data-resident="${esc(r.id)}" value="${esc(r.nick)}" maxlength="60"></div>`).join(''):'<p class="zab-note">아직 등장한 고정 주민이 없어요.</p>'}<p class="zab-note">수정한 이름은 새 활동부터 적용되고 과거 게시글 표시는 유지돼요.</p>`:
   `<h4>데이터 관리</h4><div class="zab-row">${btn('export','JSON 내보내기','zab-primary')}${btn('import','JSON 가져오기')}</div><input type="file" id="zab-import-file" accept="application/json,.json" hidden><p class="zab-note">가져오기할 때 덮어쓰기와 합치기 중 선택합니다. Gemini API 키는 제외됩니다.</p><div class="zab-divider"></div>${btn('reset-community','현재 커뮤니티 초기화','zab-danger')}<p class="zab-note">다른 커뮤니티·채팅방의 기록은 영향을 받지 않아요.</p>`}</div>`;}
-  async function onClick(e){const b=e.target.closest('button[data-act]');if(!b){const card=e.target.closest('[data-open]');if(card){detailId=card.dataset.open;postsView='detail';render();}return;}const a=b.dataset.act;if(a==='close'){panel.hidden=true;return;}if(a==='profiles-panel'){profilePanelOpen=true;settingsOpen=false;render();requestProfiles();return;}if(a==='profiles-back'){profilePanelOpen=false;settingsOpen=false;render();return;}if(a==='settings'){profilePanelOpen=false;settingsOpen=!settingsOpen;render();return;}if(a==='settings-back'){settingsOpen=false;render();return;}if(a.startsWith('tab:')){settingTab=a.slice(4);render();if(settingTab==='ai')updateProfileStatus();return;}if(a==='pick-community'){settingsOpen=true;settingTab='community';render();return;}if(a==='write'){postsView='write';render();return;}if(a==='back'){postsView='list';render();return;}if(a==='publish'){makeOwnPost(panel.querySelector('#zab-own-title')?.value||'',panel.querySelector('#zab-own-body')?.value||'');return;}if(a==='generate')return generate('manual');if(a==='regen')return generate('regenerate');if(a==='cancel'){cancelBusy();show('생성을 취소했어요. 0턴부터 시작합니다.');return;}if(a==='sort-recent'||a==='sort-popular'){currentBoard().sort=a==='sort-recent'?'recent':'popular';saved();render();return;}if(a==='delete')return deletePost(detailId);if(a==='send-comment'){addOwnComment(detailId,'',panel.querySelector('#zab-comment-text')?.value||'');return;}if(a.startsWith('reply:')){const area=panel.querySelector('#zab-reply-area');if(area){const id=a.slice(6);area.innerHTML=`<label>대댓글 작성</label><textarea id="zab-reply-text" rows="2"></textarea><button data-act="send-reply:${esc(id)}" class="zab-primary">등록</button>`;}return;}if(a.startsWith('send-reply:')){addOwnComment(detailId,a.slice(11),panel.querySelector('#zab-reply-text')?.value||'');return;}if(a==='react'){return generate('react',currentBoard().posts.find(x=>x.id===detailId));}if(a==='save-key'){setKey(panel.querySelector('#zab-api-key')?.value||'');panel.querySelector('#zab-api-key').value='';show('API 키를 저장했어요.');return;}if(a==='models')return fetchModels();if(a==='check-model')return checkSelectedModel();if(a==='set-manual-model'){const id=String(panel.querySelector('#zab-manual-model')?.value||'').trim().replace(/^models\//,'');if(!/^[a-zA-Z0-9._-]{3,100}$/.test(id))return show('올바른 Gemini 모델 ID를 입력하세요.');data.settings.model=id;saveSettings();return show('모델을 '+id+'로 설정했어요.');}if(a==='refresh-profiles'){requestProfiles();return;}if(a==='add-custom'){const name=panel.querySelector('#zab-custom-name')?.value.trim();if(!name)return show('커뮤니티 이름을 입력해 주세요.');const c={id:'custom-'+uid(),name:short(name,80),desc:short(panel.querySelector('#zab-custom-desc')?.value,2000),nick:short(panel.querySelector('#zab-custom-nick')?.value,400),style:short(panel.querySelector('#zab-custom-style')?.value,2000)};data.settings.custom.push(c);saveSettings();show('커뮤니티가 추가됐어요.');return;}if(a.startsWith('edit-custom:')){const id=a.slice(12),c=data.settings.custom.find(x=>x.id===id);if(!c)return;const name=prompt('커뮤니티 이름',c.name);if(name===null)return;const desc=prompt('커뮤니티 설명·분위기',c.desc);if(desc===null)return;const nick=prompt('닉네임 형식',c.nick);if(nick===null)return;const style=prompt('말투 지침',c.style);if(style===null)return;Object.assign(c,{name:short(name,80)||c.name,desc:short(desc,2000),nick:short(nick,400),style:short(style,2000)});saveSettings();return;}if(a.startsWith('remove-custom:')){const id=a.slice(14);if(!confirm('커뮤니티 설정을 삭제할까요? 기록도 삭제하려면 데이터 관리에서 먼저 초기화해 주세요.'))return;data.settings.custom=data.settings.custom.filter(x=>x.id!==id);if(data.settings.selected===id)communityChange('everytime');saveSettings();return;}if(a==='reset-community')return resetCommunity();if(a==='export')return exportJSON();if(a==='import')return panel.querySelector('#zab-import-file')?.click();}
-  function onInput(e){const el=e.target;if(!el.dataset.resident)return;const r=currentBoard().residents[el.dataset.resident];if(r){r.nick=short(el.value,60);saved();}}
+  async function onClick(e){const b=e.target.closest('button[data-act]');if(!b){const card=e.target.closest('[data-open]');if(card){detailId=card.dataset.open;postsView='detail';render();}return;}const a=b.dataset.act;if(a==='close'){panel.hidden=true;return;}if(a==='profiles-panel'){profilePanelOpen=true;settingsOpen=false;render();return;}if(a==='profiles-back'){profilePanelOpen=false;settingsOpen=false;render();return;}if(a==='settings'){profilePanelOpen=false;settingsOpen=!settingsOpen;render();return;}if(a==='settings-back'){settingsOpen=false;render();return;}if(a.startsWith('tab:')){settingTab=a.slice(4);render();if(settingTab==='ai')updateProfileStatus();return;}if(a==='pick-community'){settingsOpen=true;settingTab='community';render();return;}if(a==='write'){postsView='write';render();return;}if(a==='back'){postsView='list';render();return;}if(a==='publish'){makeOwnPost(panel.querySelector('#zab-own-title')?.value||'',panel.querySelector('#zab-own-body')?.value||'');return;}if(a==='generate')return generate('manual');if(a==='regen')return generate('regenerate');if(a==='cancel'){cancelBusy();show('생성을 취소했어요. 0턴부터 시작합니다.');return;}if(a==='sort-recent'||a==='sort-popular'){currentBoard().sort=a==='sort-recent'?'recent':'popular';saved();render();return;}if(a==='delete')return deletePost(detailId);if(a==='send-comment'){addOwnComment(detailId,'',panel.querySelector('#zab-comment-text')?.value||'');return;}if(a.startsWith('reply:')){const area=panel.querySelector('#zab-reply-area');if(area){const id=a.slice(6);area.innerHTML=`<label>대댓글 작성</label><textarea id="zab-reply-text" rows="2"></textarea><button data-act="send-reply:${esc(id)}" class="zab-primary">등록</button>`;}return;}if(a.startsWith('send-reply:')){addOwnComment(detailId,a.slice(11),panel.querySelector('#zab-reply-text')?.value||'');return;}if(a==='react'){return generate('react',currentBoard().posts.find(x=>x.id===detailId));}if(a==='save-key'){setKey(panel.querySelector('#zab-api-key')?.value||'');panel.querySelector('#zab-api-key').value='';show('API 키를 저장했어요.');return;}if(a==='models')return fetchModels();if(a==='check-model')return checkSelectedModel();if(a==='set-manual-model'){const id=String(panel.querySelector('#zab-manual-model')?.value||'').trim().replace(/^models\//,'');if(!/^[a-zA-Z0-9._-]{3,100}$/.test(id))return show('올바른 Gemini 모델 ID를 입력하세요.');data.settings.model=id;saveSettings();return show('모델을 '+id+'로 설정했어요.');}if(a==='refresh-profiles'){requestProfiles();return;}if(a==='save-profiles'){saveProfileDraft();return;}if(a==='discard-profiles'){discardProfileDraft();return;}if(a==='add-custom'){const name=panel.querySelector('#zab-custom-name')?.value.trim();if(!name)return show('커뮤니티 이름을 입력해 주세요.');const c={id:'custom-'+uid(),name:short(name,80),desc:short(panel.querySelector('#zab-custom-desc')?.value,2000),nick:short(panel.querySelector('#zab-custom-nick')?.value,400),style:short(panel.querySelector('#zab-custom-style')?.value,2000)};data.settings.custom.push(c);saveSettings();show('커뮤니티가 추가됐어요.');return;}if(a.startsWith('edit-custom:')){const id=a.slice(12),c=data.settings.custom.find(x=>x.id===id);if(!c)return;const name=prompt('커뮤니티 이름',c.name);if(name===null)return;const desc=prompt('커뮤니티 설명·분위기',c.desc);if(desc===null)return;const nick=prompt('닉네임 형식',c.nick);if(nick===null)return;const style=prompt('말투 지침',c.style);if(style===null)return;Object.assign(c,{name:short(name,80)||c.name,desc:short(desc,2000),nick:short(nick,400),style:short(style,2000)});saveSettings();return;}if(a.startsWith('remove-custom:')){const id=a.slice(14);if(!confirm('커뮤니티 설정을 삭제할까요? 기록도 삭제하려면 데이터 관리에서 먼저 초기화해 주세요.'))return;data.settings.custom=data.settings.custom.filter(x=>x.id!==id);if(data.settings.selected===id)communityChange('everytime');saveSettings();return;}if(a==='reset-community')return resetCommunity();if(a==='export')return exportJSON();if(a==='import')return panel.querySelector('#zab-import-file')?.click();}
+  function onInput(e){const el=e.target;
+    if(el.dataset.profileEdit){
+      const p=el.dataset.profileEdit==='user'?profileCache.users.find(x=>profileKey(x)===profileDraftSelection.userId):profileCache.characters.find(x=>profileKey(x)===el.dataset.profileId);
+      if(p&&['name','description'].includes(el.dataset.profileField)){
+        if(!p._key)p._key=profileKey(p);
+        p[el.dataset.profileField]=short(el.value,el.dataset.profileField==='name'?160:16000);
+      }
+      return;
+    }
+    if(!el.dataset.resident)return;const r=currentBoard().residents[el.dataset.resident];if(r){r.nick=short(el.value,60);saved();}}
   function onChange(e){const el=e.target;if(el.id==='zab-import-file'){const file=el.files?.[0];if(file)importJSON(file);el.value='';return;}if(!data)return;
     if(el.dataset.profileUser==='yes'||el.hasAttribute('data-profile-character')){
-      const previous=data.settings.profileSelection||{userId:'',characterIds:[]};
+      const previous=profileDraftSelection;
       if(el.dataset.profileUser==='yes')previous.userId=String(el.value||'');
       else{const id=el.dataset.profileCharacter;const ids=new Set(safeArray(previous.characterIds));if(el.checked)ids.add(id);else ids.delete(id);previous.characterIds=[...ids];}
-      data.settings.profileSelection=previous;
-      invalidatePending('');runEpoch++;turnCount=0;saved();render();return;
+      profileDraftSelection=previous;render();return;
     }
     const name=el.dataset.setting;if(!name)return;const s=data.settings,v=el.type==='checkbox'?el.checked:el.value;if(name==='auto')return toggleAuto(v);if(name==='selected')return communityChange(v);if(name.startsWith('profiles.')){s.profiles[name.slice(9)]=short(v,20000);}else if(['turns','posts','newComments','oldComments','oldPostWindow'].includes(name)){const limits={turns:[1,999],posts:[1,15],newComments:[0,30],oldComments:[0,100],oldPostWindow:[0,300]};s[name]=num(v,...limits[name],defaults()[name]);if(name==='turns'){runEpoch++;clearTimeout(autoTimer);turnCount=0;}}else s[name]=v;saveSettings();}
   function exportJSON(){if(!data)return;const payload={format:'zeta-anonymous-board',version:VERSION,exportedAt:new Date().toISOString(),room:data.room,settings:copy(data.settings),boards:copy(data.boards)};delete payload.settings.apiKey;const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='zeta-anonymous-board-'+data.room.slice(0,8)+'-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),45000);show('JSON 백업 다운로드를 요청했어요.');}
   async function importJSON(file){if(file.size>25*1024*1024)return show('25MB를 넘는 파일은 가져올 수 없어요.');let obj;try{obj=JSON.parse(await file.text());}catch{return show('JSON 파일을 해석할 수 없어요.');}if(obj?.format!=='zeta-anonymous-board'||!obj.room||!obj.boards||typeof obj.boards!=='object'||Array.isArray(obj.boards)||!obj.settings)return show('제타 익명 게시판 백업 형식이 아니에요.');if(obj.room!==room&&!confirm('백업의 채팅방 ID가 현재 방과 달라요. 현재 방에 복원할까요?'))return;const choice=prompt('복원 방식 선택: 1 = 덮어쓰기, 2 = 합치기','2');if(!['1','2'].includes(choice))return;const before=copy(data);try{if(choice==='1'){data.settings={...defaults(),...obj.settings,selected:obj.settings.selected||'everytime'};data.settings.profileSelection={userId:String(obj.settings.profileSelection?.userId||''),characterIds:safeArray(obj.settings.profileSelection?.characterIds).map(String)};data.boards=copy(obj.boards);}else{for(const [id,src] of Object.entries(obj.boards)){if(!src||!Array.isArray(src.posts))continue;const target=data.boards[id]||(data.boards[id]=blankBoard());const ids=new Map(target.posts.map(p=>[p.id,p]));for(const p of src.posts){if(!p?.id||!Array.isArray(p.comments))continue;if(!ids.has(p.id)){target.posts.push(p);ids.set(p.id,p);}else{const existing=ids.get(p.id);if(existing.title!==p.title||existing.body!==p.body){if(confirm('중복 게시글 내용이 달라요. 백업 내용으로 덮어쓸까요?\n'+p.title))Object.assign(existing,p);}else{const comments=new Set(existing.comments.map(x=>x.id));for(const c of p.comments)if(c.id&&!comments.has(c.id)){existing.comments.push(c);comments.add(c.id);}}}}target.residents={...safeObj(src.residents),...safeObj(target.residents)};target.started=target.started||src.started||target.posts.length>0;}
-      for(const c of safeArray(obj.settings.custom)){if(!data.settings.custom.some(x=>x.id===c.id))data.settings.custom.push(c);}}
+      if(!data.settings.savedProfiles&&obj.settings.savedProfiles?.user)data.settings.savedProfiles=copy(obj.settings.savedProfiles);for(const c of safeArray(obj.settings.custom)){if(!data.settings.custom.some(x=>x.id===c.id))data.settings.custom.push(c);}}
       for(const b of Object.values(data.boards)){b.posts=safeArray(b.posts).filter(p=>p&&p.id&&Array.isArray(p.comments)).slice(0,10000);b.residents=safeObj(b.residents);b.lastBatch=null;b.unread=0;}
-      runEpoch++;cancelBusy();turnCount=0;await writeRoom(data);show('백업 복원이 완료됐어요.');settingsOpen=false;render();}catch(e){data=before;show('복원 실패: '+e.message);}}
+      runEpoch++;cancelBusy();turnCount=0;
+      const snap=data.settings.savedProfiles;
+      profileCollectionActive=false;
+      profileCache=snap?.user?{users:[copy(snap.user)],characters:copy(safeArray(snap.characters)),plot:null}:{users:[],characters:[],plot:null};
+      profileDraftSelection=snap?.user?{userId:profileKey(snap.user),characterIds:safeArray(snap.characters).map(profileKey)}:{userId:'',characterIds:[]};
+      await writeRoom(data);show('백업 복원이 완료됐어요.');settingsOpen=false;render();}catch(e){data=before;show('복원 실패: '+e.message);}}
   const safeObj=x=>x&&typeof x==='object'&&!Array.isArray(x)?x:{};
   window.addEventListener('resize',applySize);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
