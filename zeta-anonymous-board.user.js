@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.1.11
+// @version      0.1.12
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.1.11', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.1.12', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -629,22 +629,21 @@
   }
   function renderProfileChoices(){
     const selected=profileDraftSelection;
-    const userOptions=[['','-- 유저 프로필 선택 필수 --'],...profileCache.users.map(p=>[profileKey(p),p.name+(p.description?' · 설명 있음':'')])];
+    const userRows=profileCache.users.map(p=>{const id=profileKey(p),checked=id===selected.userId;return `<label class="zab-profile-choice"><input type="checkbox" data-profile-user="yes" value="${esc(id)}" ${checked?'checked':''}><span><strong>${esc(p.name)}</strong><small>${esc(short(p.description,100)||'설명 미확인')}</small></span></label>`;}).join('');
     const user=profileCache.users.find(p=>profileKey(p)===selected.userId);
     const userEditor=user?`<div class="zab-section"><label>유저 이름 수정</label><input data-profile-edit="user" data-profile-field="name" value="${esc(user.name)}" maxlength="160"><label>유저 설명 수정</label><textarea data-profile-edit="user" data-profile-field="description" rows="5">${esc(user.description)}</textarea></div>`:'';
     const charRows=profileCache.characters.map(p=>{
       const id=profileKey(p),checked=safeArray(selected.characterIds).includes(id);
       return `<div class="zab-section"><label class="zab-profile-choice"><input type="checkbox" data-profile-character="${esc(id)}" ${checked?'checked':''}><strong>${esc(p.name)}</strong></label>
         ${checked?`<label>캐릭터 이름 수정</label><input data-profile-edit="character" data-profile-id="${esc(id)}" data-profile-field="name" value="${esc(p.name)}" maxlength="160">
-        <label>캐릭터 설명 수정</label><textarea data-profile-edit="character" data-profile-id="${esc(id)}" data-profile-field="description" rows="5">${esc(p.description)}</textarea>`:`<p class="zab-note">${esc(short(p.description,180)||'설명 미확인')}</p>`}</div>`;
+        <label>캐릭터 설명 수정</label><textarea data-profile-edit="character" data-profile-id="${esc(id)}" data-profile-field="description" rows="5">${esc(p.description)}</textarea>${!String(p.description||'').trim()?'<p class="zab-note">설명 미확인 · 제타에서 캐릭터 프로필 사진을 클릭해 상세 설명을 연 다음, 프로필을 다시 불러오세요.</p>':''}`:`<p class="zab-note">${esc(short(p.description,180)||'설명 미확인 · 제타에서 캐릭터 프로필 사진을 클릭해 상세 설명을 열고 다시 불러오세요.')}</p>`}</div>`;
     }).join('');
-    return `<label>Gemini에 전달할 유저 프로필 (필수 · 1개)</label>${selectionForProfile(userOptions,selected.userId)}${userEditor}
+    return `<label>Gemini에 전달할 유저 프로필 (필수 · 1개)</label>${userRows||'<p class="zab-note">불러온 유저 프로필이 없어요.</p>'}${userEditor}
       <label>Gemini에 전달할 캐릭터 프로필 (필수 · 1명 이상)</label>
       ${charRows||'<p class="zab-note">저장된 프로필이 없어요. 불러오기 버튼으로 가져오세요.</p>'}
       <p class="zab-note">편집 내용은 아래 저장 버튼을 눌러야 적용됩니다. 기존 저장본은 그전까지 유지돼요.</p>
       <div class="zab-row">${btn('save-profiles','프로필 저장','zab-primary')}${btn('discard-profiles','수정 취소')}</div>`;
   }
-  function selectionForProfile(opts,current){return `<select data-profile-user="yes">${opts.map(([id,label])=>`<option value="${esc(id)}" ${id===current?'selected':''}>${esc(label)}</option>`).join('')}</select>`;}
   function updateProfileStatus(){
     const el=panel?.querySelector('#zab-profile-status');
     if(el)el.textContent=`${profileInfo} · ${profileSelectionStatus()} · 불러온 후보 캐릭터 ${profileCache.characters.length}명 · 유저 ${profileCache.users.length}개`;
@@ -795,7 +794,6 @@
   function renderProfilePanel(){
     const profiles=data?.settings?.profiles||{};
     return `${btn('profiles-back','← 게시판으로')}<h3>👤 프로필 감지·선택</h3>
-      <p class="zab-note">채팅방별로 프로필 원문을 저장합니다. 자동 감지·자동 덮어쓰기는 하지 않으며, 직접 불러오기·수정·저장을 선택하세요.</p>
       <div class="zab-row">${btn('refresh-profiles','제타 프로필 불러오기','zab-primary')}</div>
       <p class="zab-note" id="zab-profile-status">${esc(profileInfo)} · ${esc(profileSelectionStatus())} · 불러온 후보 캐릭터 ${profileCache.characters.length}명 · 유저 ${profileCache.users.length}개</p>
       ${renderProfileChoices()}
@@ -827,7 +825,7 @@
   function onChange(e){const el=e.target;if(el.id==='zab-import-file'){const file=el.files?.[0];if(file)importJSON(file);el.value='';return;}if(!data)return;
     if(el.dataset.profileUser==='yes'||el.hasAttribute('data-profile-character')){
       const previous=profileDraftSelection;
-      if(el.dataset.profileUser==='yes')previous.userId=String(el.value||'');
+      if(el.dataset.profileUser==='yes')previous.userId=el.checked?String(el.value||''):(previous.userId===String(el.value||'')?'':previous.userId);
       else{const id=el.dataset.profileCharacter;const ids=new Set(safeArray(previous.characterIds));if(el.checked)ids.add(id);else ids.delete(id);previous.characterIds=[...ids];}
       profileDraftSelection=previous;render();return;
     }
