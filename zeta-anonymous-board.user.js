@@ -170,7 +170,7 @@
         }
         if(latestBusy){if(requestId)latestQueued=requestId;return;}
         latestBusy=true;latestRuns++;
-        const isBaseline=latestRuns===1, limitPages=isBaseline?30:8;
+        const isBaseline=latestRuns===1, limitPages=isBaseline?12:3;
         const unique=new Map(),cursors=new Set();
         let cursor='',limit=100,ok=false,error='',pages=0,throttles=0;
         try{
@@ -818,8 +818,9 @@
     if(list)list.textContent=profileSelectionStatus();
     renderStatus();
   }
-  function requestLatest(){if(!room||loadBusy)return;loadBusy=true;bridge('latest');setTimeout(()=>{loadBusy=false;},1700);}
-  let lastBridgeStateAsk=0;const runner=setInterval(()=>{if(!document.body)return;const m=/\/rooms\/([0-9a-f-]{36})(?:[/?#]|$)/i.exec(location.pathname);if(m)setRoom(m[1]);if(now()-lastBridgeStateAsk>6000){lastBridgeStateAsk=now();bridge('state');}if(!room||!data)return;if(now()-lastLiveSync>6500)requestLatest();if(!panel)mount();},2000);
+  let lastLatestRequest=0;
+  function requestLatest(){if(!room||loadBusy)return;loadBusy=true;lastLatestRequest=now();bridge('latest');setTimeout(()=>{loadBusy=false;},2200);}
+  let lastBridgeStateAsk=0;const runner=setInterval(()=>{if(!document.body)return;const m=/\/rooms\/([0-9a-f-]{36})(?:[/?#]|$)/i.exec(location.pathname);if(m)setRoom(m[1]);if(now()-lastBridgeStateAsk>6000){lastBridgeStateAsk=now();bridge('state');}if(!room||!data)return;if(now()-lastLatestRequest>8000)requestLatest();if(!panel)mount();},2000);
   function saveSettings(){if(!data)return;data.settings.turns=num(data.settings.turns,1,999,1);saved();render();}
   function communityChange(id){if(!data)return;if(data.settings.selected===id)return;invalidatePending('커뮤니티를 변경했어요.');runEpoch++;turnCount=0;data.settings.selected=id;postsView='list';detailId='';saved();render();}
   function toggleAuto(on){if(!data)return;invalidatePending('');runEpoch++;turnCount=0;data.settings.auto=on;saveSettings();show('자동 갱신 '+(on?'ON':'OFF')+' · 0턴부터 시작');}
@@ -1011,5 +1012,5 @@
   window.addEventListener('resize',applySize);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
   // Only expose non-sensitive diagnostic information. Authentication never leaves the Zeta page bridge.
-  window.zetaAnonymousBoardDiagnostics=()=>({version:VERSION,room,turnCount,turns:observedTurns.length,auto:!!data?.settings.auto,community:data?.settings.selected,busy:!!busy,profileCandidates:{users:profileCache.users.length,characters:profileCache.characters.length},profileChosen:profileSelection().valid,started:!!data?.boards?.[data?.settings?.selected]?.started,baselineReady,seenTurns:seenTurnIds.size,activeTurnKey,turnEvents,autoStage,lastLiveSync,turnMessagesSeen,turnPages,turnStatusError,lastTurnAnchor});
+  window.zetaAnonymousBoardDiagnostics=()=>({version:VERSION,room,turnCount,turns:observedTurns.length,auto:!!data?.settings.auto,community:data?.settings.selected,busy:!!busy,profileCandidates:{users:profileCache.users.length,characters:profileCache.characters.length},profileChosen:profileSelection().valid,started:!!data?.boards?.[data?.settings?.selected]?.started,baselineReady,seenTurns:seenTurnIds.size,activeTurnKey,turnEvents,autoStage,lastLiveSync,lastLatestRequest,turnMessagesSeen,turnPages,turnStatusError,lastTurnAnchor});
 })();
