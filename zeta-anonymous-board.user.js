@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.1.2
+// @version      0.1.4
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,14 +22,14 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.1.2', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.1.4', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
-  // Free-tier pricing candidates: this is not a quota or API-key entitlement claim.
-  // The API models.list response cannot identify an account's tier or remaining RPM/RPD/TPM.
+  // Recommendations are candidates based on the user-provided comparison, not verified quotas.
+  // Actual model availability and free-tier limits depend on the API key and project.
   const recommendedModels=[
-    {id:'gemini-3.1-flash-lite',label:'Gemini 3.1 Flash-Lite · 무료 자동 갱신 추천'},
-    {id:'gemini-2.5-flash-lite',label:'Gemini 2.5 Flash-Lite · 무료 경량 대체'},
-    {id:'gemini-2.5-flash',label:'Gemini 2.5 Flash · 품질 우선 선택'}
+    {id:'gemini-3.5-flash-lite',label:'Gemini 3.5 Flash-Lite · 무료 자동 갱신 기본 추천'},
+    {id:'gemini-3.1-flash-lite',label:'Gemini 3.1 Flash-Lite · 기본 대체 모델'},
+    {id:'gemini-3.8-flash',label:'Gemini 3.8 Flash · 고품질 수동 생성 후보'}
   ];
   const models=recommendedModels.map(x=>x.id);
   const presets=[
@@ -40,7 +40,7 @@
     {id:'x',name:'X',desc:'짧은 글, 실시간 화제와 반응',nick:'@handle',style:'짧고 속도감 있는 SNS 말투'},
     {id:'neighborhood',name:'동네 게시판',desc:'동네 생활, 목격담과 지역 정보',nick:'동네산책러, 이웃주민',style:'주민 카페 말투'}
   ];
-  const defaults=()=>({auto:true,turns:1,posts:3,newComments:7,oldComments:10,oldPostWindow:20,quiet:'daily',model:'gemini-3.1-flash-lite',fallback:'',temperature:0.9,guide:'',userNickMode:'auto',userNick:'',selected:'everytime',custom:[],status:'',profiles:{user:'',characters:'',world:''}});
+  const defaults=()=>({auto:true,turns:1,posts:3,newComments:7,oldComments:10,oldPostWindow:20,quiet:'daily',model:'gemini-3.5-flash-lite',fallback:'gemini-3.1-flash-lite',temperature:0.9,guide:'',userNickMode:'auto',userNick:'',selected:'everytime',custom:[],status:'',profiles:{user:'',characters:'',world:''}});
   const now=()=>Date.now(), uid=()=> (crypto.randomUUID?.()||'id-'+now().toString(36)+'-'+Math.random().toString(36).slice(2));
   const num=(x,min,max,d)=>{const n=Number(x);return Number.isFinite(n)?Math.max(min,Math.min(max,Math.trunc(n))):d;};
   const copy=x=>JSON.parse(JSON.stringify(x));
@@ -58,7 +58,7 @@
   function blankBoard(){return {posts:[],residents:{},sort:'recent',started:false,seen:{},lastBatch:null,unread:0};}
   let room='',data=null,postsView='list',detailId='',settingsOpen=false,settingTab='basic',panel=null,launcher=null,notice='',noticeUntil=0;
   let busy=null,pending=null,turnCount=0,activeTurnKey='',activeTurnHash='',lastTurnKeys=[],baselineReady=false,autoTimer=null,latestTimer=null,loadBusy=false,lastLiveSync=0,runEpoch=0;
-  let profileCache={characters:[],user:null,plot:null}, captured=null, networkRoom='',roomMarker='';
+  let profileCache={characters:[],user:null,plot:null}, profileInfo='프로필 연결 대기 중', profileRequestRoom='', captured=null, networkRoom='',roomMarker='';
   const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
   const bridgeId='zab-'+Math.random().toString(36).slice(2);
   // The page bridge keeps Zeta authorization in page context. It NEVER sends headers to the userscript UI or Gemini.
@@ -112,7 +112,7 @@
   }
   installBridge();
   function bridge(action){window.postMessage({tag:'zab-control',channel:bridgeId,action},'*');}
-  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];baselineReady=false;room=id;postsView='list';detailId='';profileCache={characters:[],user:null,plot:null};profileInfo='프로필을 불러오는 중…';profileRequestRoom='';try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};if(['apartment','dating'].includes(data.settings.selected))data.settings.selected='everytime';render();setTimeout(()=>{bridge('latest');bridge('profiles');profileRequestRoom=id;},650);}
+  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];baselineReady=false;room=id;postsView='list';detailId='';profileCache={characters:[],user:null,plot:null};profileInfo='프로필을 불러오는 중…';profileRequestRoom='';try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};if(!data.settings.fallbackPreferenceV014){if(!data.settings.fallback)data.settings.fallback='gemini-3.1-flash-lite';data.settings.fallbackPreferenceV014=true;saved();}if(['apartment','dating'].includes(data.settings.selected))data.settings.selected='everytime';render();setTimeout(()=>{if(room!==id)return;bridge('state');bridge('latest');bridge('profiles');profileRequestRoom=id;},650);}
   function currentBoard(){if(!data)return blankBoard();const id=data.settings.selected;if(!data.boards[id])data.boards[id]=blankBoard();return data.boards[id];}
   function currentCommunity(){return [...presets,...safeArray(data?.settings.custom)].find(x=>x.id===data?.settings.selected)||presets[0];}
   function saved(){if(!data)return;data.updatedAt=now();writeRoom(data).catch(e=>show('저장 실패: '+e.message));}
@@ -147,6 +147,11 @@
     if(m.type==='profileComplete'&&m.room===room){profileInfo='프로필 API 확인'+(m.partial?' · 일부 항목 확인 실패':'');updateProfileStatus();}
     if(m.type==='profileError'&&(!m.room||m.room===room)){profileInfo=m.message||'프로필 수집 실패';updateProfileStatus();}
     if(m.type==='error')show(m.message);});
+  // The injected bridge can announce its initial room before our message listener exists.
+  // Ask for the current bridge state after registering the listener, and periodically
+  // retry state discovery for SPA navigation / missed Safari events.
+  queueMicrotask(()=>bridge('state'));
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)bridge('state');});
   function profileItem(raw,allowUserName=false){
     if(!raw||typeof raw!=='object'||Array.isArray(raw))return null;
     const name=short(raw.name||raw.displayName||raw.display_name||raw.nickname||raw.title||'',160);
@@ -197,7 +202,7 @@
     if(list)list.textContent=profileCache.characters.length?profileCache.characters.map(p=>p.name||'(이름 없음)').join(', '):'확인된 캐릭터가 없습니다.';
   }
   function requestLatest(){if(!room||loadBusy)return;loadBusy=true;bridge('latest');setTimeout(()=>{loadBusy=false;},1700);}
-  const runner=setInterval(()=>{if(!document.body)return;const m=/\/rooms\/([0-9a-f-]{36})(?:[/?#]|$)/i.exec(location.pathname);if(m)setRoom(m[1]);if(!room||!data)return;try{const p=page.zetaCurrentProfiles?.get?.();if(p){ingestProfile({characters:[p.character,...safeArray(p.characters)].filter(Boolean),userProfile:p.user});updateProfileStatus();}}catch{}if(now()-lastLiveSync>6500)requestLatest();if(!panel)mount();},2000);
+  let lastBridgeStateAsk=0;const runner=setInterval(()=>{if(!document.body)return;const m=/\/rooms\/([0-9a-f-]{36})(?:[/?#]|$)/i.exec(location.pathname);if(m)setRoom(m[1]);if(now()-lastBridgeStateAsk>6000){lastBridgeStateAsk=now();bridge('state');}if(!room||!data)return;try{const p=page.zetaCurrentProfiles?.get?.();if(p){ingestProfile({characters:[p.character,...safeArray(p.characters)].filter(Boolean),userProfile:p.user});updateProfileStatus();}}catch{}if(now()-lastLiveSync>6500)requestLatest();if(!panel)mount();},2000);
   function saveSettings(){if(!data)return;data.settings.turns=num(data.settings.turns,1,999,1);saved();render();}
   function communityChange(id){if(!data)return;if(data.settings.selected===id)return;invalidatePending('커뮤니티를 변경했어요.');runEpoch++;turnCount=0;data.settings.selected=id;postsView='list';detailId='';saved();render();}
   function toggleAuto(on){if(!data)return;invalidatePending('');runEpoch++;turnCount=0;data.settings.auto=on;saveSettings();show('자동 갱신 '+(on?'ON':'OFF')+' · 0턴부터 시작');}
@@ -224,7 +229,7 @@
       return `<option value="${esc(id)}" ${id===selected?'selected':''}>${esc(label)}</option>`;
     }).join('');}
     return `<select data-setting="model">${options(s.model,false)}</select>
-      <p class="zab-note">★ 무료 요금표에 등재된 추천 후보예요. 무료 요청 한도는 프로젝트마다 다르며, API 목록에 보여도 무료 호출 가능 여부가 보장되지는 않아요.</p>
+      <p class="zab-note">★ 무료 사용자 기준 참고 추천 후보예요. 실제 무료 지원·요청 한도는 계정마다 다르므로 호출 확인과 AI Studio 한도 화면으로 확인하세요.</p>
       <label>대체 모델 (선택 사항)</label><select data-setting="fallback">${options(s.fallback||'',true)}</select>
       <p class="zab-note">기본 모델에 404·429·503 오류가 발생할 때만 선택한 대체 모델로 1회 재시도합니다. 두 모델 모두 사용량이 계산될 수 있어요.</p>
       <div class="zab-row">${btn('models','모델 목록 조회')}${btn('check-model','선택 모델 호출 확인','',modelCheckBusy?'disabled':'')}</div>
