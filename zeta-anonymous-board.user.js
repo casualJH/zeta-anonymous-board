@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.2.1
+// @version      0.2.2
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.2.1', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.2.2', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -157,9 +157,10 @@
       },{once:true});
       else if(document.body){new MutationObserver(scheduleScreenScan).observe(document.body,{subtree:true,childList:true});inspectProfileScreen();}
       const discover=()=>{const m=/\/rooms\/([0-9a-f-]{36})(?:[/?#]|$)/i.exec(location.pathname);if(m&&m[1]!==currentRoom){currentRoom=m[1];emit('room',{room:currentRoom});}};
-      // Export DEV compatible cursor pagination, HTTP fallback, and source message-ID de-duplication.
-      // Authentication stays inside the page bridge. Initial/explicit fetches may span pages.
-      let latestBusy=false,latestQueued=null,latestRuns=0;
+      // Use the same cursor-based source messages as chat-export DEV.
+      // First read loads all history; later reads replace the newest segment
+      // until its boundary overlaps the previous snapshot.
+      let latestBusy=false,latestQueued=null,historyRoom='',historyMessages=[];
       async function latest(requestId=''){
         discover();
         const target=currentRoom;
@@ -169,36 +170,49 @@
           return;
         }
         if(latestBusy){if(requestId)latestQueued=requestId;return;}
-        latestBusy=true;latestRuns++;
-        const isBaseline=latestRuns===1, limitPages=isBaseline?12:3;
-        const unique=new Map(),cursors=new Set();
-        let cursor='',limit=100,ok=false,error='',pages=0,throttles=0;
+        latestBusy=true;
+        if(historyRoom!==target){historyRoom=target;historyMessages=[];}
+        const previous=historyMessages;
+        const oldIds=new Set(previous.map(m=>m.id));
+        const fetched=[],seen=new Set(),cursors=new Set();
+        let cursor='',limit=100,ok=false,error='',pages=0,throttles=0,overlapAt=-1,completed=false;
         try{
-          for(let page=0;page<limitPages;page++){
+          for(let page=0;page<300;page++){
             if(target!==currentRoom)break;
             const url=origin+'/v1/rooms/'+target+'/messages?limit='+limit+(cursor?'&cursor='+encodeURIComponent(cursor):'');
             const response=await base.call(window,url,{headers:{...headers},credentials:'include',cache:'no-store'});
             if((response.status===400||response.status===422)&&limit!==20){limit=20;page--;continue;}
-            if(response.status===429){if(++throttles>3){error='제타 API 요청 제한 (429)';break;}await new Promise(r=>setTimeout(r,2500));page--;continue;}
+            if(response.status===429){if(++throttles>4){error='제타 API 요청 제한 (429)';break;}await new Promise(r=>setTimeout(r,2500));page--;continue;}
             throttles=0;
             if(!response.ok){error='제타 메시지 API HTTP '+response.status;break;}
             const body=await response.json();
             if(!Array.isArray(body.messages)){error='메시지 응답 형식 오류';break;}
-            pages++;ok=true;
-            for(const m of body.messages)if(m&&typeof m.id==='string'&&!unique.has(m.id))unique.set(m.id,m);
-            if(!body.nextCursor||!body.messages.length)break;
+            pages++;
+            for(const m of body.messages){
+              if(!m||typeof m.id!=='string'||seen.has(m.id))continue;
+              seen.add(m.id);fetched.push(m);
+            }
+            // A page boundary with an existing ID lets us reuse the older
+            // suffix without refetching the entire history every 8 seconds.
+            if(previous.length&&fetched.length){
+              const boundary=fetched[fetched.length-1].id;
+              overlapAt=previous.findIndex(m=>m.id===boundary);
+              if(overlapAt>=0){completed=true;break;}
+            }
+            if(!body.nextCursor||!body.messages.length){completed=true;break;}
             if(typeof body.nextCursor!=='string'||cursors.has(body.nextCursor)){error='페이지 커서 중복';break;}
             cursors.add(body.nextCursor);cursor=body.nextCursor;
-            // The first page is always attempted; remaining pages extend overlap with previous history.
             await new Promise(r=>setTimeout(r,220));
           }
-          if(target===currentRoom&&ok){
-            emit('messages',{room:target,messages:[...unique.values()],latest:true});
-          }
+          if(target===currentRoom&&completed){
+            historyMessages=overlapAt>=0?[...fetched,...previous.slice(overlapAt+1).filter(m=>!seen.has(m.id))]:fetched;
+            emit('messages',{room:target,messages:historyMessages,latest:true});
+            ok=true;
+          }else if(!error)error='메시지 수집 미완료';
         }catch(e){error=String(e.message||e);}
         finally{
           if(target===currentRoom){
-            emit('messagesStatus',{room:target,ok,count:unique.size,pages,error});
+            emit('messagesStatus',{room:target,ok,count:historyMessages.length,pages,error});
             if(requestId)emit('latestEnd',{room:target,requestId,ok});
           }
           latestBusy=false;
@@ -266,7 +280,7 @@
   }
   installBridge();
   function bridge(action,requestId=''){window.postMessage({tag:'zab-control',channel:bridgeId,action,requestId},'*');}
-  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);clearTimeout(autoRetryTimer);autoRetryTimer=null;autoWaitUntil=0;autoStage='';pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];seenTurnIds=new Set();lastTurnTime=0;turnEvents=0;lastTurnAnchor='';turnMessagesSeen=0;turnStatusError='';turnPages=0;baselineReady=false;independentProfileCollector.roomChanged();room=id;postsView='list';detailId='';profilePanelOpen=false;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='저장된 프로필 확인 중';profileRequestRoom='';profileCollectionActive=false;profileDraftSelection={userId:'',characterIds:[]};try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};
+  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);clearTimeout(autoRetryTimer);autoRetryTimer=null;autoWaitUntil=0;autoStage='';pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];seenTurnIds=new Set();lastTurnTime=0;turnEvents=0;completedTurnTotal=null;lastTurnAnchor='';turnMessagesSeen=0;turnStatusError='';turnPages=0;baselineReady=false;independentProfileCollector.roomChanged();room=id;postsView='list';detailId='';profilePanelOpen=false;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='저장된 프로필 확인 중';profileRequestRoom='';profileCollectionActive=false;profileDraftSelection={userId:'',characterIds:[]};try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};
     // Only a confirmed snapshot may be used after a reload. Old versions stored IDs
     // but not source content, so those users must import and save once.
     const snapshot=data.settings.savedProfiles;
@@ -396,65 +410,57 @@
     if(groups.length){const last=groups[groups.length-1];activeTurnKey=last.key;activeTurnHash=fingerprint(last.turn);lastTurnTime=Math.max(lastTurnTime,last.time);}
     lastTurnKeys=groups.map(g=>g.key);baselineReady=true;
   }
-  let lastTurnAnchor='',turnMessagesSeen=0,turnStatusError='',turnPages=0;
+  let lastTurnAnchor='',turnMessagesSeen=0,turnStatusError='',turnPages=0,completedTurnTotal=null;
+  // Count delta from the COMPLETE turn total shown by chat-export DEV.
+  // Incomplete trailing USER messages are not counted. Intro counts once.
   function processMessages(msgs,latest=false){
-    if(!room||!data)return;
+    if(!room||!data||!latest)return; // never count incomplete intercepted API pages
     const {groups,normalized}=turnGroups(msgs);
-    if(!normalized.length)return;
-    turnMessagesSeen=Math.max(turnMessagesSeen,new Set(normalized.map(p=>p.messageId)).size);
-    if(latest)lastRawMessageSnapshot=normalized;
-    if(!baselineReady){
-      observedTurns=groups.map(g=>g.turn);
+    const all=buildTurns(normalized);
+    const completed=all.filter(t=>!t.incomplete);
+    const total=completed.length;
+    turnMessagesSeen=new Set(normalized.map(p=>p.messageId)).size;
+    lastRawMessageSnapshot=normalized;
+    observedTurns=all.filter(t=>!t.incomplete);
+    if(completedTurnTotal===null){
+      completedTurnTotal=total;
       acceptBaseline(groups);
-      lastTurnAnchor=groups.at(-1)?.anchor||'';
+      const tail=groups.at(-1);
+      lastTurnAnchor=tail?.anchor||'';
+      if(!tail&&completed.length){activeTurnKey=completed.at(-1).id;activeTurnHash=fingerprint(completed.at(-1));}
       renderStatus();return;
     }
-    if(!groups.length)return;
-    const tail=groups.at(-1),lastKey=tail.key,lastHash=fingerprint(tail.turn);
-    const lastOverlap=groups.reduce((index,g,i)=>seenTurnIds.has(g.key)?i:index,-1);
-    // A partial snapshot ending at a known earlier turn must not rewind our baseline.
-    if(seenTurnIds.has(lastKey)&&lastKey!==activeTurnKey)return;
-    const candidates=groups.filter((g,i)=>!seenTurnIds.has(g.key)&&(
-      lastOverlap>=0?i>lastOverlap:
-      g.time>0&&lastTurnTime>0&&g.time>lastTurnTime
-    ));
-    // Replacement of the most recent CHARACTER answer after the SAME USER
-    // is a reroll when the previous answer vanished, not an additional turn.
-    const reroll=lastKey!==activeTurnKey&&!!lastTurnAnchor&&tail.anchor===lastTurnAnchor&&
-      !groups.some(g=>g.key===activeTurnKey)&&
-      candidates.length===1&&candidates[0].key===lastKey;
-    if(reroll){
-      seenTurnIds.add(lastKey);
-      turnEvents++;
-      const rerollEligible=data.settings.auto&&currentBoard().started&&(turnCount>=data.settings.turns||!!currentBoard().lastBatch?.temporary||busy?.kind==='auto');
-      invalidatePending('최근 답변 변경 감지 · 15초 대기 재시작');
-      if(rerollEligible){turnCount=Math.max(turnCount,data.settings.turns);scheduleAuto(lastKey,lastHash);}
-    }else if(candidates.length){
-      for(const g of candidates)seenTurnIds.add(g.key);
-      turnEvents+=candidates.length;
+    const delta=total-completedTurnTotal;
+    const tail=completed.at(-1)||null;
+    const tailKey=tail?.id||'';
+    const tailHash=tail?fingerprint(tail):'';
+    const oldKey=activeTurnKey,oldHash=activeTurnHash;
+    const changed=!!tail&&tailKey===oldKey&&tailHash!==oldHash;
+    const replacement=!!tail&&tailKey!==oldKey&&delta===0;
+    // The full total is the only count authority. Older API snapshots never
+    // create turns merely because their message IDs differ.
+    if(delta>0){
+      turnEvents+=delta;
       if(data.settings.auto&&currentBoard().started){
-        turnCount+=candidates.length;
+        turnCount+=delta;
         const previousBatch=currentBoard().lastBatch;
         if(previousBatch?.temporary){previousBatch.temporary=false;saved();}
-        if(turnCount>=num(data.settings.turns,1,999,1))scheduleAuto(lastKey,lastHash);
-        else show('새 턴 '+candidates.length+'개 · '+turnCount+'/'+data.settings.turns+'턴');
+        if(turnCount>=num(data.settings.turns,1,999,1))scheduleAuto(tailKey,tailHash);
+        else show('완료 턴 +'+delta+' · '+turnCount+'/'+data.settings.turns+'턴');
       }
-    }else if(lastKey===activeTurnKey&&lastHash!==activeTurnHash){
-      const eligible=data.settings.auto&&currentBoard().started&&(turnCount>=data.settings.turns||!!currentBoard().lastBatch?.temporary||busy?.kind==='auto');
-      invalidatePending('최근 답변 내용 변경 · 15초 대기 재시작');
-      if(eligible){turnCount=Math.max(turnCount,data.settings.turns);scheduleAuto(lastKey,lastHash);}
-    }else if(lastOverlap<0&&!seenTurnIds.has(lastKey)){
-      // No overlap or comparable timestamp: do not count historical pages.
-      for(const g of groups)seenTurnIds.add(g.key);
+    }else if(delta<0){
+      if(data.settings.auto&&currentBoard().started){
+        invalidatePending('완료 턴 감소 · 생성 대기 취소');
+        turnCount=Math.max(0,turnCount+delta);
+      }
+    }else if((changed||replacement)&&data.settings.auto&&currentBoard().started){
+      const eligible=turnCount>=data.settings.turns||!!currentBoard().lastBatch?.temporary||busy?.kind==='auto';
+      invalidatePending('최근 답변 변경 감지 · 생성 대기 다시 시작');
+      if(eligible){turnCount=Math.max(turnCount,data.settings.turns);scheduleAuto(tailKey,tailHash);}
     }
-    if(candidates.length||lastKey===activeTurnKey){
-      activeTurnKey=lastKey;activeTurnHash=lastHash;
-      lastTurnAnchor=tail.anchor||'';
-      lastTurnTime=Math.max(lastTurnTime,tail.time);
-      lastTurnKeys=groups.map(g=>g.key);
-      observedTurns=groups.map(g=>g.turn);
-    }
-    if(seenTurnIds.size>2000)seenTurnIds=new Set([...seenTurnIds].slice(-1200));
+    completedTurnTotal=total;
+    if(tail){activeTurnKey=tailKey;activeTurnHash=tailHash;}
+    if(groups.length)lastTurnAnchor=groups.at(-1).anchor||'';
     renderStatus();
   }
   let lastRawMessageSnapshot=[];
@@ -507,7 +513,7 @@
     if(!profileReady()){show('자동 생성 대기 · '+profileSelectionStatus());return;}
     autoStage='generating';generate('auto');
   }
-  window.addEventListener('message',e=>{const m=e.data;if(e.source!==window||m?.tag!=='zab-bridge'||m.channel!==bridgeId)return;if(m.type==='room'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='state'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='messages'&&m.room===room){processMessages(m.messages,!!m.latest);lastLiveSync=now();}if(m.type==='latestEnd'&&m.room===room)completeAutoCheck(m);if(m.type==='messagesStatus'&&m.room===room){turnStatusError=m.error||'';turnPages=m.pages||0;if(m.ok)lastLiveSync=now();else if(m.error)show('메시지 조회 실패 · '+m.error);}if(m.type==='profile'&&m.room===room&&profileCollectionActive){profileDetection.seen++;profileDetection.lastPath=m.path||'';if(m.path)profileDetection.paths.add(m.path);ingestProfile(m.profile,m.path||'');if(profileWaitTimer&&(profileCache.characters.length||profileCache.users.length))endProfileLoading('프로필 수집됨 · 추가 캐릭터 확인 가능');else updateProfileStatus();}
+  window.addEventListener('message',e=>{const m=e.data;if(e.source!==window||m?.tag!=='zab-bridge'||m.channel!==bridgeId)return;if(m.type==='room'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='state'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='messages'&&m.room===room&&m.latest){processMessages(m.messages,true);lastLiveSync=now();}if(m.type==='latestEnd'&&m.room===room)completeAutoCheck(m);if(m.type==='messagesStatus'&&m.room===room){turnStatusError=m.error||'';turnPages=m.pages||0;if(m.ok)lastLiveSync=now();else if(m.error)show('메시지 조회 실패 · '+m.error);}if(m.type==='profile'&&m.room===room&&profileCollectionActive){profileDetection.seen++;profileDetection.lastPath=m.path||'';if(m.path)profileDetection.paths.add(m.path);ingestProfile(m.profile,m.path||'');if(profileWaitTimer&&(profileCache.characters.length||profileCache.users.length))endProfileLoading('프로필 수집됨 · 추가 캐릭터 확인 가능');else updateProfileStatus();}
     if(m.type==='profileComplete'&&m.room===room&&profileCollectionActive){const extra=m.errors?.length?' ('+m.errors.join(' / ').slice(0,160)+')':'';endProfileLoading('수집 완료'+(m.partial?' · 일부 요청 실패':'')+extra);}
     if(m.type==='profileError'&&profileCollectionActive&&(!m.room||m.room===room)){profileDetection.apiError=m.message||'프로필 수집 실패';endProfileLoading(m.message||'프로필 수집 실패');}
     if(m.type==='error')show(m.message);});
@@ -923,7 +929,7 @@
       profilePanelOpen=true;settingsOpen=false;render();return show('필수 프로필 선택이 필요해요. '+profileSelectionStatus());
     }
     if(!board.started&&kind==='auto')return;clearTimeout(autoTimer);const batchToReplace=kind==='regenerate'?board.lastBatch:null;
-    const request={id:uid(),kind,cancelled:false,room,community:data.settings.selected,epoch:runEpoch,request:null};const countedAtStart=turnCount;let succeeded=false;busy=request;reactionTarget=post?.id||'';renderStatus();try{const prompt=promptPayload(kind==='react'?'react':'generate',post);const model=data.settings.model||models[0];const body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.9,responseMimeType:'application/json',maxOutputTokens:8192}};const res=await generateWithFallback(key,model,body,request);if(request.cancelled||busy!==request||request.room!==room||request.community!==data?.settings.selected||request.epoch!==runEpoch)return;const result=parseGemini(res);if(kind==='regenerate'&&batchToReplace&&board.lastBatch!==batchToReplace)throw Error('재생성 대상이 변경되었습니다.');const next=applyResult(result,kind,batchToReplace);if(kind==='manual'||kind==='auto'){turnCount=kind==='auto'?Math.max(0,turnCount-countedAtStart):0;autoStage='';if(kind==='manual'&&baselineReady){const {groups}=turnGroups(lastRawMessageSnapshot);if(groups.length){acceptBaseline(groups);lastTurnAnchor=groups.at(-1)?.anchor||'';}}}if(kind==='regenerate'){next.temporary=batchToReplace?.temporary||false;saved();}succeeded=true;show('게시판 갱신 완료 · 새 게시글 '+next.created.length+'개');render();}
+    const request={id:uid(),kind,cancelled:false,room,community:data.settings.selected,epoch:runEpoch,request:null};const countedAtStart=turnCount;let succeeded=false;busy=request;reactionTarget=post?.id||'';renderStatus();try{const prompt=promptPayload(kind==='react'?'react':'generate',post);const model=data.settings.model||models[0];const body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.9,responseMimeType:'application/json',maxOutputTokens:8192}};const res=await generateWithFallback(key,model,body,request);if(request.cancelled||busy!==request||request.room!==room||request.community!==data?.settings.selected||request.epoch!==runEpoch)return;const result=parseGemini(res);if(kind==='regenerate'&&batchToReplace&&board.lastBatch!==batchToReplace)throw Error('재생성 대상이 변경되었습니다.');const next=applyResult(result,kind,batchToReplace);if(kind==='manual'||kind==='auto'){turnCount=kind==='auto'?Math.max(0,turnCount-countedAtStart):0;autoStage='';if(kind==='manual'&&baselineReady){completedTurnTotal=buildTurns(lastRawMessageSnapshot).filter(t=>!t.incomplete).length;const {groups}=turnGroups(lastRawMessageSnapshot);if(groups.length){acceptBaseline(groups);lastTurnAnchor=groups.at(-1)?.anchor||'';}}}if(kind==='regenerate'){next.temporary=batchToReplace?.temporary||false;saved();}succeeded=true;show('게시판 갱신 완료 · 새 게시글 '+next.created.length+'개');render();}
     catch(e){if(!request.cancelled)show('게시글 생성 실패: '+e.message);}finally{if(busy===request)busy=null;reactionTarget='';if(succeeded&&kind==='auto'&&turnCount>=data?.settings.turns&&data?.settings.auto&&!autoTimer&&activeTurnKey&&!request.cancelled)scheduleAuto(activeTurnKey,activeTurnHash);render();}
   }
   function chooseNick(){if(data.settings.userNickMode==='custom'&&data.settings.userNick.trim())return short(data.settings.userNick,60);const c=currentCommunity();if(c.id==='everytime')return'익명';if(c.id==='blind')return'익명';return '익명 주민';}
@@ -1012,5 +1018,5 @@
   window.addEventListener('resize',applySize);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
   // Only expose non-sensitive diagnostic information. Authentication never leaves the Zeta page bridge.
-  window.zetaAnonymousBoardDiagnostics=()=>({version:VERSION,room,turnCount,turns:observedTurns.length,auto:!!data?.settings.auto,community:data?.settings.selected,busy:!!busy,profileCandidates:{users:profileCache.users.length,characters:profileCache.characters.length},profileChosen:profileSelection().valid,started:!!data?.boards?.[data?.settings?.selected]?.started,baselineReady,seenTurns:seenTurnIds.size,activeTurnKey,turnEvents,autoStage,lastLiveSync,lastLatestRequest,turnMessagesSeen,turnPages,turnStatusError,lastTurnAnchor});
+  window.zetaAnonymousBoardDiagnostics=()=>({version:VERSION,room,turnCount,turns:observedTurns.length,auto:!!data?.settings.auto,community:data?.settings.selected,busy:!!busy,profileCandidates:{users:profileCache.users.length,characters:profileCache.characters.length},profileChosen:profileSelection().valid,started:!!data?.boards?.[data?.settings?.selected]?.started,baselineReady,seenTurns:seenTurnIds.size,activeTurnKey,turnEvents,autoStage,lastLiveSync,lastLatestRequest,turnMessagesSeen,turnPages,turnStatusError,lastTurnAnchor,completedTurnTotal});
 })();
