@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.1.9
+// @version      0.1.10
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.1.9', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.1.10', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -217,7 +217,7 @@
   }
   installBridge();
   function bridge(action,requestId=''){window.postMessage({tag:'zab-control',channel:bridgeId,action,requestId},'*');}
-  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];baselineReady=false;room=id;postsView='list';detailId='';profilePanelOpen=false;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='프로필 연결 대기 중';profileRequestRoom='';try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};if(!data.settings.fallbackPreferenceV014){if(!data.settings.fallback)data.settings.fallback='gemini-3.1-flash-lite';data.settings.fallbackPreferenceV014=true;saved();}if(['apartment','dating'].includes(data.settings.selected))data.settings.selected='everytime';render();setTimeout(()=>{if(room!==id)return;bridge('state');bridge('latest');requestProfiles();profileRequestRoom=id;},650);}
+  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];baselineReady=false;independentProfileCollector.roomChanged();room=id;postsView='list';detailId='';profilePanelOpen=false;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='프로필 연결 대기 중';profileRequestRoom='';try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};if(!data.settings.fallbackPreferenceV014){if(!data.settings.fallback)data.settings.fallback='gemini-3.1-flash-lite';data.settings.fallbackPreferenceV014=true;saved();}if(['apartment','dating'].includes(data.settings.selected))data.settings.selected='everytime';render();setTimeout(()=>{if(room!==id)return;bridge('state');bridge('latest');requestProfiles();profileRequestRoom=id;},650);}
   function endProfileLoading(message){
     clearTimeout(profileWaitTimer);profileWaitTimer=null;
     profileInfo=message;
@@ -236,7 +236,7 @@
       const count=profileCache.characters.length+profileCache.users.length;
       endProfileLoading(count?'확인 완료 · 수집된 프로필 '+count+'개 (추가 응답 없음)':'프로필 요청 시간 초과 · 제타 채팅방을 새로고침한 뒤 다시 시도하세요.');
     },10000);
-    bridge('profiles');
+    independentProfileCollector.refresh();
   }
   function currentBoard(){if(!data)return blankBoard();const id=data.settings.selected;if(!data.boards[id])data.boards[id]=blankBoard();return data.boards[id];}
   function currentCommunity(){return [...presets,...safeArray(data?.settings.custom)].find(x=>x.id===data?.settings.selected)||presets[0];}
@@ -389,6 +389,189 @@
       if(profilePanelOpen)render();
     }
   }
+  // Independent profile collector, adapted directly from zeta-current-profiles / zeta-profiles-mob.
+  // No use of other installed userscripts, their events, or their public APIs.
+  // Unlike the message bridge, this observer hooks the page's real fetch/XHR in the
+  // userscript's own execution path and consumes the responses without postMessage.
+  const independentProfileCollector=(()=>{
+    const api='https://api.zeta-ai.io', maxPayload=900000;
+    const direct=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
+    const nativeFetch=direct.fetch, XHR=direct.XMLHttpRequest;
+    const nativeOpen=XHR?.prototype?.open, nativeSend=XHR?.prototype?.send;
+    const nativeHeader=XHR?.prototype?.setRequestHeader;
+    let auth={}, lastPlot='', lastRoom='', generation=0, requestSeq=0, screenPending=false;
+    let installed=false, pendingRefresh=false;
+    const xhrInfo=new WeakMap(), seenScreens=new Map();
+    const pathOf=url=>{try{const u=new URL(String(url),location.href);return u.origin===api?u.pathname:null;}catch{return null;}};
+    const roomOf=path=>{const m=/\/rooms\/([0-9a-f-]{36})(?:\/|$)/i.exec(path||'');return m&&UUID.test(m[1])?m[1]:'';};
+    const isRelated=path=>!!path&&(/\/rooms\//.test(path)||/profile|persona|character|bot|agent|\/plots\//i.test(path));
+    function collectAuth(raw){
+      try{
+        const entries=raw?.entries?raw.entries():Array.isArray(raw)?raw:Object.entries(raw||{});
+        for(const [k,v] of entries){const key=String(k).toLowerCase();if(['authorization','x-client-native-version','x-client-type','x-client-version','x-device-type','x-user-language'].includes(key))auth[key]=String(v);}
+      }catch{}
+    }
+    function note(path,payload){
+      if(!path)return;
+      profileDetection.seen++;
+      profileDetection.lastPath=path;
+      profileDetection.paths.add(path);
+      if(/\/user-personas\/(?:select|selected)\/?$/i.test(path)){
+        if(payload&&typeof payload==='object'&&!Array.isArray(payload)){
+          ingestProfile({userProfile:payload},path);
+        }
+        else if(payload===null)profileInfo='제타에서 선택된 유저 프로필이 없어요.';
+      }else if(payload&&typeof payload==='object'&&!Array.isArray(payload)){
+        ingestProfile(payload,path);
+      }
+      // The actual room detail carries ALL character profiles, not just the first.
+      if(/^\/v1\/rooms\/[0-9a-f-]{36}\/?$/i.test(path)&&payload?.plot){
+        lastPlot=String(payload.plot.id||'');
+        const chars=safeArray(payload.plot.characters);
+        if(chars.length)ingestProfile({characters:chars},path);
+      }
+      if(profileWaitTimer&&(profileCache.characters.length||profileCache.users.length)){
+        endProfileLoading('프로필 감지 완료 · 유저와 캐릭터를 선택하세요.');
+      }else updateProfileStatus();
+      if(profilePanelOpen)render();
+    }
+    function process(path,payload,status,forRoom,epoch){
+      if(epoch!==generation||!path||status<200||status>=300)return;
+      const scoped=roomOf(path);
+      if(!room||scoped&&scoped!==room||forRoom&&forRoom!==room)return;
+      // Zeta's room detail, plot, and persona response can each arrive independently.
+      if(!isRelated(path)||/\/messages(?:\/|$)/i.test(path))return;
+      note(path,payload);
+    }
+    function inspectFetch(response,path,forRoom,epoch){
+      if(!response?.ok||!isRelated(path)||/\/messages(?:\/|$)/i.test(path))return;
+      if(Number(response.headers?.get?.('content-length')||0)>maxPayload)return;
+      const type=String(response.headers?.get?.('content-type')||'');
+      if(type&&!/json/i.test(type)&&!/user-personas\/select/i.test(path))return;
+      response.clone().text().then(text=>{
+        if(text.length>maxPayload)return;
+        const payload=text.trim()?JSON.parse(text):null;
+        process(path,payload,response.status,forRoom,epoch);
+      }).catch(()=>{});
+    }
+    function collectVisibleDescription(){
+      if(!room||!document.body)return;
+      const known=profileCache.characters;
+      // This is the exact modal traversal pattern used by the working profile script.
+      for(const title of document.querySelectorAll('h3,[role="heading"]')){
+        const name=(title.textContent||'').trim();if(!name||name.length>160)continue;
+        const header=title.parentElement;
+        const close=header?.querySelector('button[aria-label="Close"],button[aria-label="닫기"]');
+        if(!close||!close.getClientRects().length)continue;
+        const overlay=header.parentElement;
+        if(!overlay||overlay.closest('[aria-hidden="true"],[hidden]'))continue;
+        const sections=[...overlay.children].filter(node=>node!==header&&node.getClientRects().length);
+        const explicit=sections.filter(node=>node.matches('[data-sentry-component="CharacterDescription"]'));
+        const match=known.filter(p=>p.name.trim()===name);
+        if(match.length>1)continue;
+        const eligible=explicit.length?explicit:match.length===1?sections:[];
+        for(const section of eligible){
+          const body=section.matches('.whitespace-pre-wrap')?section:section.querySelector('.whitespace-pre-wrap');
+          if(!body||!body.getClientRects().length||body.closest('[hidden],[aria-hidden="true"]'))continue;
+          const description=String(body.innerText||'').trim();
+          if(!description||description.length>20000||seenScreens.get(name)===description)continue;
+          seenScreens.set(name,description);
+          note('/ui/character-description',{characters:[{id:match[0]?.id||'',name,description}]});
+          return;
+        }
+      }
+    }
+    function scanSoon(){if(screenPending)return;screenPending=true;setTimeout(()=>{screenPending=false;collectVisibleDescription();},120);}
+    function install(){
+      if(installed)return;installed=true;
+      if(typeof nativeFetch==='function'){
+        direct.fetch=function(input,init){
+          const url=typeof input==='string'?input:input?.url||String(input||'');
+          const path=pathOf(url);
+          if(path){collectAuth(init?.headers||input?.headers);const id=roomOf(path);if(id&&!room)setRoom(id);}
+          const forRoom=room,epoch=generation;
+          const response=nativeFetch.apply(this,arguments);
+          if(isRelated(path))Promise.resolve(response).then(r=>inspectFetch(r,path,forRoom,epoch)).catch(()=>{});
+          return response;
+        };
+      }
+      if(nativeOpen&&nativeSend){
+        XHR.prototype.open=function(method,url){xhrInfo.set(this,{path:pathOf(url),headers:[]});return nativeOpen.apply(this,arguments);};
+        if(nativeHeader)XHR.prototype.setRequestHeader=function(k,v){const st=xhrInfo.get(this);if(st&&st.path)st.headers.push([k,v]);return nativeHeader.apply(this,arguments);};
+        XHR.prototype.send=function(){
+          const st=xhrInfo.get(this);if(st?.path){collectAuth(st.headers);const id=roomOf(st.path);if(id&&!room)setRoom(id);}
+          const forRoom=room,epoch=generation;
+          if(st&&isRelated(st.path))this.addEventListener('load',function(){
+            if(this.status<200||this.status>=300)return;
+            try{
+              const text=this.responseType==='json'?null:this.responseText;
+              if(text?.length>maxPayload)return;
+              const payload=this.responseType==='json'?this.response:JSON.parse(text||'null');
+              process(st.path,payload,this.status,forRoom,epoch);
+            }catch{}
+          },{once:true});
+          return nativeSend.apply(this,arguments);
+        };
+      }
+      const begin=()=>{
+        if(!document.body){setTimeout(begin,120);return;}
+        const observer=new MutationObserver(scanSoon);
+        observer.observe(document.body,{subtree:true,childList:true,characterData:true,attributes:true,attributeFilter:['aria-hidden','hidden','class']});
+        scanSoon();
+      };
+      if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',begin,{once:true});else begin();
+      profileInfo='독립 감지 시작됨 · 제타 프로필 응답 대기 중';
+    }
+    async function refresh(){
+      if(!room)return endProfileLoading('채팅방을 먼저 연결하세요.');
+      if(pendingRefresh)return;
+      pendingRefresh=true;
+      const startRoom=room,epoch=generation,token=++requestSeq;
+      if(!Object.keys(auth).some(k=>k==='authorization')){
+        // Existing Zeta calls can still be observed without explicit credentials.
+        endProfileLoading('제타 API 감지 대기 · 채팅방을 새로고침하거나 프로필 선택 화면을 열어 주세요.');
+        pendingRefresh=false;return;
+      }
+      const aborts=[];
+      const request=async(path,deadline=6500)=>{
+        const controller=new AbortController();aborts.push(controller);
+        const timer=setTimeout(()=>controller.abort(),deadline);
+        try{
+          const resp=await nativeFetch.call(direct,api+path,{headers:{...auth},credentials:'include',cache:'no-store',signal:controller.signal});
+          if(!resp.ok)throw Error('HTTP '+resp.status);
+          const payload=await resp.json();
+          if(room===startRoom&&epoch===generation&&token===requestSeq)process(path,payload,resp.status,startRoom,epoch);
+          return payload;
+        }finally{clearTimeout(timer);}
+      };
+      const errors=[];
+      try{
+        let details;
+        try{details=await request('/v1/rooms/'+startRoom);}catch(e){errors.push('채팅방 상세 '+String(e.message||e));}
+        if(room!==startRoom||epoch!==generation)return;
+        const plotId=String(details?.plot?.id||details?.plotId||lastPlot||'');
+        if(plotId&&/^[0-9a-z_-]{4,120}$/i.test(plotId)){
+          try{await request('/v1/plots/'+encodeURIComponent(plotId));}catch(e){errors.push('플롯 상세 '+String(e.message||e));}
+          const base='/v1/plots/'+encodeURIComponent(plotId)+'/rooms/'+startRoom+'/user-personas/';
+          for(const suffix of ['selected','select']){
+            try{const p=await request(base+suffix,5000);if(p&&typeof p==='object')break;}
+            catch(e){errors.push('유저 프로필 '+suffix+' '+String(e.message||e));}
+          }
+        }
+      }finally{
+        aborts.forEach(c=>{try{c.abort();}catch{}});
+        pendingRefresh=false;
+        if(room===startRoom&&epoch===generation){
+          const count=profileCache.characters.length+profileCache.users.length;
+          endProfileLoading(count?'수집 완료 · 프로필 '+count+'개 · 선택 필요':errors.length?'프로필 요청 실패 · '+errors.join(' / ').slice(0,180):'프로필 후보 미발견 · 제타에서 프로필 화면을 열어 주세요.');
+        }
+      }
+    }
+    function roomChanged(){generation++;seenScreens.clear();lastPlot='';requestSeq++;}
+    return {install,refresh,roomChanged,diagnostics:()=>({installed,authorized:!!auth.authorization})};
+  })();
+  independentProfileCollector.install();
+
   function profileSelection(){
     const raw=data?.settings.profileSelection||{};
     const users=profileCache.users,characters=profileCache.characters;
@@ -550,7 +733,7 @@
   #zab-panel[hidden]{display:none!important}#zab-panel *{box-sizing:border-box}#zab-panel button{font:600 12px system-ui;border:1px solid #d5d7df;background:#fff;color:#333;border-radius:7px;padding:7px 9px;cursor:pointer}#zab-panel button:disabled{opacity:.45;cursor:default}#zab-panel button.zab-primary{background:#d94d50;border-color:#d94d50;color:white}#zab-panel button.zab-danger{color:#c03943}#zab-panel button[hidden],#zab-panel [hidden]{display:none!important}
   #zab-panel .zab-head{padding:10px 12px;border-bottom:1px solid #eee;display:flex;gap:8px;align-items:center;min-height:45px;cursor:grab;touch-action:none;user-select:none}#zab-panel .zab-head strong{font-size:15px;flex:1}#zab-panel .zab-head button{padding:4px 8px}
   #zab-panel .zab-content{overflow:auto;overscroll-behavior:contain;flex:1;padding:12px;min-height:0}#zab-panel .zab-status{font-size:11px;color:#6d737a;min-height:15px}#zab-panel .zab-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap}#zab-panel .zab-flex{display:flex;justify-content:space-between;align-items:center;gap:8px}#zab-panel .zab-tabs{display:flex;gap:4px;overflow-x:auto;white-space:nowrap;padding:2px 0 8px}#zab-panel .zab-tabs button{flex-shrink:0}#zab-panel .zab-tabs .active{color:#d94d50;border-color:#d94d50;background:#fff4f4}#zab-panel .zab-card{border-bottom:1px solid #eee;padding:12px 2px;cursor:pointer}#zab-panel .zab-card:hover{background:#fcfcfc}#zab-panel .zab-card h3{margin:0 0 4px;font-size:14px;line-height:1.4}#zab-panel .zab-card .excerpt{color:#6b6f77;font-size:12px;margin:5px 0;white-space:pre-wrap;overflow-wrap:anywhere}#zab-panel .zab-meta{font-size:11px;color:#81858c;overflow-wrap:anywhere}#zab-panel .zab-section{padding:10px 0;border-bottom:1px solid #eee}#zab-panel .zab-section h4{margin:0 0 8px;font-size:13px}#zab-panel label{display:block;font-size:12px;font-weight:600;margin:9px 0 4px}#zab-panel input:not([type=checkbox]),#zab-panel select,#zab-panel textarea{width:100%;font:13px/1.5 system-ui;border:1px solid #ced2d9;border-radius:7px;padding:8px;color:#24272b;background:#fff}#zab-panel textarea{resize:vertical;min-height:55px}#zab-panel input[type=number]{max-width:115px}#zab-panel .zab-comment{padding:8px 0;border-bottom:1px solid #f0f0f0}#zab-panel .zab-reply{margin:6px 0 0 17px;border-left:2px solid #e5e5e5;padding-left:10px}#zab-panel .zab-note{font-size:11px;color:#7b8087}#zab-panel .zab-chip{display:inline-block;background:#f1f3f5;color:#696f78;padding:2px 6px;border-radius:6px;font-size:11px}#zab-panel .zab-resize{position:absolute;right:0;bottom:0;width:32px;height:32px;cursor:nwse-resize;touch-action:none;user-select:none;font:20px system-ui;color:#9ba1a9;text-align:right;padding:8px 4px 0 0;background:transparent}#zab-panel label.zab-profile-choice{display:flex;align-items:flex-start;gap:8px;padding:9px 6px;border:1px solid #eceef0;border-radius:7px;margin:5px 0;font-weight:400}#zab-panel .zab-profile-choice input{flex:0 0 auto;margin-top:4px}#zab-panel .zab-profile-choice span{display:block;min-width:0}#zab-panel .zab-profile-choice small{display:block;color:#848a90;font-size:11px;overflow-wrap:anywhere}#zab-panel .zab-divider{height:1px;background:#eee;margin:10px 0}#zab-panel .zab-toolbar{display:flex;gap:6px;margin:10px 0}#zab-panel .zab-toolbar button{flex:1;white-space:nowrap}#zab-panel .zab-footer{padding:6px 10px;border-top:1px solid #eee;display:flex;align-items:center;gap:8px;justify-content:space-between}#zab-panel p{white-space:pre-wrap;overflow-wrap:anywhere}
-  `;document.documentElement.appendChild(style);launcher=document.createElement('button');launcher.type='button';launcher.id='zab-launch';launcher.innerHTML='익명 게시판 <span class="zab-unread"></span>';panel=document.createElement('section');panel.id='zab-panel';panel.hidden=true;panel.innerHTML='<div class="zab-head" id="zab-drag"><strong>제타 익명 게시판</strong><button data-act="profiles-panel" aria-label="프로필 선택" title="프로필 선택">👤</button><button data-act="settings">⚙</button><button data-act="close">×</button></div><div class="zab-content" id="zab-main"></div><div class="zab-footer"><span class="zab-status" id="zab-status">채팅방 연결 대기 중</span><button id="zab-cancel" data-act="cancel" hidden>생성 취소</button></div><div class="zab-resize" id="zab-resize">◢</div>';
+  `;document.documentElement.appendChild(style);launcher=document.createElement('button');launcher.type='button';launcher.id='zab-launch';launcher.innerHTML='익명 게시판 <span class="zab-unread"></span>';panel=document.createElement('section');panel.id='zab-panel';panel.hidden=true;panel.innerHTML='<div class="zab-head" id="zab-drag"><strong>제타 익명 게시판</strong><button data-act="settings">⚙</button><button data-act="close">×</button></div><div class="zab-content" id="zab-main"></div><div class="zab-footer"><span class="zab-status" id="zab-status">채팅방 연결 대기 중</span><button id="zab-cancel" data-act="cancel" hidden>생성 취소</button></div><div class="zab-resize" id="zab-resize">◢</div>';
     document.body.append(launcher,panel);launcher.addEventListener('click',()=>{if(launcher.dataset.dragging==='yes'){launcher.dataset.dragging='';return;}panel.hidden=!panel.hidden;if(!panel.hidden){const b=currentBoard();b.unread=0;saved();render();applySize();}});
     panel.addEventListener('click',onClick);panel.addEventListener('change',onChange);panel.addEventListener('input',onInput);installDrag(launcher,launcher,'launch');installDrag(panel.querySelector('#zab-drag'),panel,'panel');installResize(panel.querySelector('#zab-resize'));applySize();render();}
   function applySize(){if(!panel)return;const vw=innerWidth,vh=innerHeight;if(uiPos.w)panel.style.width=Math.min(vw-8,Math.max(Math.min(245,vw-8),uiPos.w))+'px';if(uiPos.h)panel.style.height=Math.min(vh-8,Math.max(Math.min(240,vh-8),uiPos.h))+'px';if(uiPos.x!=null){const w=panel.getBoundingClientRect().width;panel.style.left=Math.max(4,Math.min(uiPos.x,vw-w-4))+'px';panel.style.right='auto';}if(uiPos.y!=null){const h=panel.getBoundingClientRect().height;panel.style.top=Math.max(4,Math.min(uiPos.y,vh-h-4))+'px';panel.style.bottom='auto';}if(uiPos.launch){const r=launcher.getBoundingClientRect();launcher.style.left=Math.max(4,Math.min(uiPos.launch.x,vw-r.width-4))+'px';launcher.style.top=Math.max(4,Math.min(uiPos.launch.y,vh-r.height-4))+'px';launcher.style.right='auto';launcher.style.bottom='auto';}}
@@ -561,7 +744,7 @@
   function ta(name,val,rows=3){return `<textarea data-setting="${esc(name)}" rows="${rows}">${esc(val)}</textarea>`;}
   function selection(name,current,opts){return `<select data-setting="${esc(name)}">${opts.map(([id,label])=>`<option value="${esc(id)}" ${id===current?'selected':''}>${esc(label)}</option>`).join('')}</select>`;}
   function render(){if(!panel)return;renderStatus();const node=panel.querySelector('#zab-main');if(!node)return;if(!data){node.innerHTML='<p>제타 채팅방을 열고 메시지가 로드되면 연결됩니다.</p>';return;}node.innerHTML=profilePanelOpen?renderProfilePanel():settingsOpen?renderSettings():postsView==='detail'?renderDetail():postsView==='write'?renderWrite():renderList();}
-  function renderList(){const b=currentBoard(),com=currentCommunity();return `<div class="zab-flex"><div><strong style="font-size:17px">${esc(com.name)}</strong><div class="zab-note">${esc(short(com.desc,95))}</div></div><button data-act="pick-community">▾</button></div>
+  function renderList(){const b=currentBoard(),com=currentCommunity();return `<div class="zab-flex"><div><strong style="font-size:17px">${esc(com.name)}</strong><div class="zab-note">${esc(short(com.desc,95))}</div></div><button data-act="profiles-panel" aria-label="프로필 감지 및 선택" title="프로필 선택">👤</button></div>
     <div class="zab-toolbar">${btn('write','글쓰기')}${btn('generate','수동 생성','zab-primary')}${btn('regen','다시 생성','',!b.lastBatch?'disabled':'')}</div>
     <div class="zab-flex"><b>전체 게시글 ${b.posts.length}</b><div>${btn('sort-recent','최신순',b.sort==='recent'?'zab-primary':'')}${btn('sort-popular','인기순',b.sort==='popular'?'zab-primary':'')}</div></div>
     ${!b.posts.length?'<div class="zab-section" style="text-align:center;padding:40px 10px;color:#888">게시글이 없어요.<br>수동 생성 버튼으로 첫 게시글을 만들어 보세요.</div>':sortedPosts().map(p=>`<div class="zab-card" data-open="${esc(p.id)}"><h3>${esc(p.title)}</h3><div class="excerpt">${esc(short(p.body,150))}</div><div class="zab-meta">${esc(p.nick)} · ${esc(timeText(p.time))}</div><div class="zab-meta">조회 ${p.views.toLocaleString()} · 좋아요 ${p.likes.toLocaleString()} · 댓글 ${stats(p).comments}</div></div>`).join('')}`;}
@@ -575,7 +758,7 @@
       <p class="zab-note" id="zab-profile-status">${esc(profileInfo)} · 캐릭터 ${profileCache.characters.length}명 · 유저 후보 ${profileCache.users.length}개</p>
       ${renderProfileChoices()}
       ${!profileCache.characters.length&&!profileCache.users.length?`<p class="zab-note">아직 감지되지 않았어요. 제타의 유저 프로필 선택 화면과 캐릭터 상세 화면을 열어 프로필 응답을 발생시킨 다음, 이 화면에서 다시 감지해 주세요.</p>`:''}
-      <p class="zab-note">진단: 제타 프로필 응답 ${profileDetection.seen}회 · 마지막 경로 ${esc(profileDetection.lastPath||'없음')}</p>
+      <p class="zab-note">진단: 제타 프로필 응답 ${profileDetection.seen}회 · 마지막 경로 ${esc(profileDetection.lastPath||'없음')} · 독립 감시 ${independentProfileCollector.diagnostics().installed?'동작':'실패'} · 인증 ${independentProfileCollector.diagnostics().authorized?'감지':'대기'}</p>
       <div class="zab-divider"></div><h4>수동 정보 보완</h4>
       <label>세계관 설정·배경</label>${ta('profiles.world',profiles.world||'',4)}
       <label>유저 프로필 설명 보완</label>${ta('profiles.user',profiles.user||'',3)}
