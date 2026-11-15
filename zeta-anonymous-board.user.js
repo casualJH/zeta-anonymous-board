@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.2.2
+// @version      0.2.3
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.2.2', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.2.3', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -180,7 +180,11 @@
           for(let page=0;page<300;page++){
             if(target!==currentRoom)break;
             const url=origin+'/v1/rooms/'+target+'/messages?limit='+limit+(cursor?'&cursor='+encodeURIComponent(cursor):'');
-            const response=await base.call(window,url,{headers:{...headers},credentials:'include',cache:'no-store'});
+            const controller=new AbortController(),deadline=setTimeout(()=>controller.abort(),10000);
+            let response;
+            try{response=await base.call(window,url,{headers:{...headers},credentials:'include',cache:'no-store',signal:controller.signal});}
+            catch(e){throw new Error(controller.signal.aborted?'제타 메시지 API 응답 시간 초과 (10초)':String(e.message||e));}
+            finally{clearTimeout(deadline);}
             if((response.status===400||response.status===422)&&limit!==20){limit=20;page--;continue;}
             if(response.status===429){if(++throttles>4){error='제타 API 요청 제한 (429)';break;}await new Promise(r=>setTimeout(r,2500));page--;continue;}
             throttles=0;
@@ -188,6 +192,7 @@
             const body=await response.json();
             if(!Array.isArray(body.messages)){error='메시지 응답 형식 오류';break;}
             pages++;
+            if(target===currentRoom)emit('messagesStatus',{room:target,loading:true,ok:false,pages,count:fetched.length+body.messages.length});
             for(const m of body.messages){
               if(!m||typeof m.id!=='string'||seen.has(m.id))continue;
               seen.add(m.id);fetched.push(m);
@@ -280,7 +285,7 @@
   }
   installBridge();
   function bridge(action,requestId=''){window.postMessage({tag:'zab-control',channel:bridgeId,action,requestId},'*');}
-  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);clearTimeout(autoRetryTimer);autoRetryTimer=null;autoWaitUntil=0;autoStage='';pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];seenTurnIds=new Set();lastTurnTime=0;turnEvents=0;completedTurnTotal=null;lastTurnAnchor='';turnMessagesSeen=0;turnStatusError='';turnPages=0;baselineReady=false;independentProfileCollector.roomChanged();room=id;postsView='list';detailId='';profilePanelOpen=false;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='저장된 프로필 확인 중';profileRequestRoom='';profileCollectionActive=false;profileDraftSelection={userId:'',characterIds:[]};try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};
+  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);clearTimeout(autoRetryTimer);autoRetryTimer=null;autoWaitUntil=0;autoStage='';pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];seenTurnIds=new Set();lastTurnTime=0;turnEvents=0;completedTurnTotal=null;lastTurnAnchor='';turnMessagesSeen=0;turnStatusError='';turnPages=0;turnLoading=false;turnLoadCount=0;baselineReady=false;independentProfileCollector.roomChanged();room=id;postsView='list';detailId='';profilePanelOpen=false;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='저장된 프로필 확인 중';profileRequestRoom='';profileCollectionActive=false;profileDraftSelection={userId:'',characterIds:[]};try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};
     // Only a confirmed snapshot may be used after a reload. Old versions stored IDs
     // but not source content, so those users must import and save once.
     const snapshot=data.settings.savedProfiles;
@@ -410,7 +415,7 @@
     if(groups.length){const last=groups[groups.length-1];activeTurnKey=last.key;activeTurnHash=fingerprint(last.turn);lastTurnTime=Math.max(lastTurnTime,last.time);}
     lastTurnKeys=groups.map(g=>g.key);baselineReady=true;
   }
-  let lastTurnAnchor='',turnMessagesSeen=0,turnStatusError='',turnPages=0,completedTurnTotal=null;
+  let lastTurnAnchor='',turnMessagesSeen=0,turnStatusError='',turnPages=0,completedTurnTotal=null,turnLoading=false,turnLoadCount=0;
   // Count delta from the COMPLETE turn total shown by chat-export DEV.
   // Incomplete trailing USER messages are not counted. Intro counts once.
   function processMessages(msgs,latest=false){
@@ -513,7 +518,7 @@
     if(!profileReady()){show('자동 생성 대기 · '+profileSelectionStatus());return;}
     autoStage='generating';generate('auto');
   }
-  window.addEventListener('message',e=>{const m=e.data;if(e.source!==window||m?.tag!=='zab-bridge'||m.channel!==bridgeId)return;if(m.type==='room'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='state'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='messages'&&m.room===room&&m.latest){processMessages(m.messages,true);lastLiveSync=now();}if(m.type==='latestEnd'&&m.room===room)completeAutoCheck(m);if(m.type==='messagesStatus'&&m.room===room){turnStatusError=m.error||'';turnPages=m.pages||0;if(m.ok)lastLiveSync=now();else if(m.error)show('메시지 조회 실패 · '+m.error);}if(m.type==='profile'&&m.room===room&&profileCollectionActive){profileDetection.seen++;profileDetection.lastPath=m.path||'';if(m.path)profileDetection.paths.add(m.path);ingestProfile(m.profile,m.path||'');if(profileWaitTimer&&(profileCache.characters.length||profileCache.users.length))endProfileLoading('프로필 수집됨 · 추가 캐릭터 확인 가능');else updateProfileStatus();}
+  window.addEventListener('message',e=>{const m=e.data;if(e.source!==window||m?.tag!=='zab-bridge'||m.channel!==bridgeId)return;if(m.type==='room'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='state'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='messages'&&m.room===room&&m.latest){processMessages(m.messages,true);lastLiveSync=now();}if(m.type==='latestEnd'&&m.room===room)completeAutoCheck(m);if(m.type==='messagesStatus'&&m.room===room){turnLoading=!!m.loading;turnPages=m.pages||0;turnLoadCount=m.count||0;if(!m.loading){turnStatusError=m.error||'';if(m.ok)lastLiveSync=now();else if(m.error)show('메시지 조회 실패 · '+m.error);}renderStatus();}if(m.type==='profile'&&m.room===room&&profileCollectionActive){profileDetection.seen++;profileDetection.lastPath=m.path||'';if(m.path)profileDetection.paths.add(m.path);ingestProfile(m.profile,m.path||'');if(profileWaitTimer&&(profileCache.characters.length||profileCache.users.length))endProfileLoading('프로필 수집됨 · 추가 캐릭터 확인 가능');else updateProfileStatus();}
     if(m.type==='profileComplete'&&m.room===room&&profileCollectionActive){const extra=m.errors?.length?' ('+m.errors.join(' / ').slice(0,160)+')':'';endProfileLoading('수집 완료'+(m.partial?' · 일부 요청 실패':'')+extra);}
     if(m.type==='profileError'&&profileCollectionActive&&(!m.room||m.room===room)){profileDetection.apiError=m.message||'프로필 수집 실패';endProfileLoading(m.message||'프로필 수집 실패');}
     if(m.type==='error')show(m.message);});
@@ -939,7 +944,7 @@
   function resetCommunity(){if(!confirm('현재 커뮤니티의 게시글·댓글·주민 기록을 모두 삭제할까요?'))return;invalidatePending('');runEpoch++;turnCount=0;data.boards[data.settings.selected]=blankBoard();saved();postsView='list';render();}
   function stats(c){return {views:c.views||0,likes:c.likes||0,comments:c.comments.reduce((n,x)=>n+1+x.replies.length,0)};}
   function sortedPosts(){const b=currentBoard();return [...b.posts].sort((a,z)=>b.sort==='recent'?z.time-a.time:((z.likes*5+stats(z).comments*3+z.views/20)/(1+Math.max(0,(now()-z.time)/86400000)*.1))-((a.likes*5+stats(a).comments*3+a.views/20)/(1+Math.max(0,(now()-a.time)/86400000)*.1)));}
-  function renderStatus(){if(!panel)return;const el=panel.querySelector('#zab-status');if(el){const phase=autoStage==='waiting'?' · 생성 대기 중':autoStage==='verifying'?' · 최신 대화 확인 중':autoStage==='retry'?' · 조회 재시도 중':autoStage==='failed'?' · 조회 실패':'';el.textContent=busy?'게시글 생성 중…':now()<noticeUntil?notice:data?'자동 '+(data.settings.auto?'ON':'OFF')+' · '+turnCount+'/'+data.settings.turns+'턴'+(completedTurnTotal!==null?' · 전체 '+completedTurnTotal+'턴':' · 대화 확인 중')+(data.settings.auto&&!currentBoard().started?' · 첫 수동 생성 필요':data.settings.auto&&!profileReady()?' · 프로필 선택 필요':phase):'채팅방 연결 대기 중';}const count=launcher?.querySelector('.zab-unread');if(count)count.textContent=data?.boards?.[data.settings.selected]?.unread?'●':'';const cancel=panel.querySelector('#zab-cancel');if(cancel)cancel.hidden=!busy;}
+  function renderStatus(){if(!panel)return;const el=panel.querySelector('#zab-status');if(el){const phase=autoStage==='waiting'?' · 생성 대기 중':autoStage==='verifying'?' · 최신 대화 확인 중':autoStage==='retry'?' · 조회 재시도 중':autoStage==='failed'?' · 조회 실패':'';el.textContent=busy?'게시글 생성 중…':now()<noticeUntil?notice:data?'자동 '+(data.settings.auto?'ON':'OFF')+' · '+turnCount+'/'+data.settings.turns+'턴'+(completedTurnTotal!==null?' · 전체 '+completedTurnTotal+'턴':(turnStatusError?' · 조회 오류: '+short(turnStatusError,85):turnLoading?' · 대화 수집 '+turnPages+'페이지 / '+turnLoadCount+'개':' · 대화 확인 중'))+(data.settings.auto&&!currentBoard().started?' · 첫 수동 생성 필요':data.settings.auto&&!profileReady()?' · 프로필 선택 필요':phase):'채팅방 연결 대기 중';}const count=launcher?.querySelector('.zab-unread');if(count)count.textContent=data?.boards?.[data.settings.selected]?.unread?'●':'';const cancel=panel.querySelector('#zab-cancel');if(cancel)cancel.hidden=!busy;}
   const tabs=[['basic','기본 설정'],['api','API 설정'],['ai','AI 설정'],['community','커뮤니티 관리'],['people','주민·닉네임'],['data','데이터 관리']];
   function mount(){if(panel||!document.body)return;const style=document.createElement('style');style.textContent=`
   #zab-launch{position:fixed;right:13px;bottom:calc(95px + env(safe-area-inset-bottom,0px));border:1px solid #c4cad3;background:#fff;color:#222;border-radius:999px;padding:10px 14px;font:700 13px system-ui;box-shadow:0 4px 18px #0003;z-index:2147483600;touch-action:none}
@@ -1018,5 +1023,5 @@
   window.addEventListener('resize',applySize);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
   // Only expose non-sensitive diagnostic information. Authentication never leaves the Zeta page bridge.
-  window.zetaAnonymousBoardDiagnostics=()=>({version:VERSION,room,turnCount,turns:observedTurns.length,auto:!!data?.settings.auto,community:data?.settings.selected,busy:!!busy,profileCandidates:{users:profileCache.users.length,characters:profileCache.characters.length},profileChosen:profileSelection().valid,started:!!data?.boards?.[data?.settings?.selected]?.started,baselineReady,seenTurns:seenTurnIds.size,activeTurnKey,turnEvents,autoStage,lastLiveSync,lastLatestRequest,turnMessagesSeen,turnPages,turnStatusError,lastTurnAnchor,completedTurnTotal});
+  window.zetaAnonymousBoardDiagnostics=()=>({version:VERSION,room,turnCount,turns:observedTurns.length,auto:!!data?.settings.auto,community:data?.settings.selected,busy:!!busy,profileCandidates:{users:profileCache.users.length,characters:profileCache.characters.length},profileChosen:profileSelection().valid,started:!!data?.boards?.[data?.settings?.selected]?.started,baselineReady,seenTurns:seenTurnIds.size,activeTurnKey,turnEvents,autoStage,lastLiveSync,lastLatestRequest,turnMessagesSeen,turnPages,turnStatusError,turnLoading,turnLoadCount,lastTurnAnchor,completedTurnTotal});
 })();
