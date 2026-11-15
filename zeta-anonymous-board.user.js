@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.1.12
+// @version      0.2.0
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.1.12', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.2.0', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -57,7 +57,8 @@
   function blankRoom(id){return {room:id,settings:defaults(),boards:{},updatedAt:now()};}
   function blankBoard(){return {posts:[],residents:{},sort:'recent',started:false,seen:{},lastBatch:null,unread:0};}
   let room='',data=null,postsView='list',detailId='',settingsOpen=false,profilePanelOpen=false,settingTab='basic',panel=null,launcher=null,notice='',noticeUntil=0;
-  let busy=null,pending=null,turnCount=0,activeTurnKey='',activeTurnHash='',lastTurnKeys=[],baselineReady=false,autoTimer=null,latestTimer=null,loadBusy=false,lastLiveSync=0,runEpoch=0, pendingAutoCheck=null;
+  let busy=null,pending=null,turnCount=0,activeTurnKey='',activeTurnHash='',lastTurnKeys=[],baselineReady=false,autoTimer=null,latestTimer=null,loadBusy=false,lastLiveSync=0,runEpoch=0,pendingAutoCheck=null;
+  let seenTurnIds=new Set(),lastTurnTime=0,autoRetryTimer=null,autoWaitUntil=0,autoStage='',turnEvents=0;
   let profileCollectionActive=false, profileDraftSelection={userId:'',characterIds:[]};
   let profileCache={characters:[],users:[],plot:null}, profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''}, profileInfo='프로필 연결 대기 중', profileRequestRoom='', profileWaitTimer=null,profileAttempt=0, captured=null, networkRoom='',roomMarker='';
   const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
@@ -72,7 +73,7 @@
       const emit=(type,obj)=>window.postMessage({tag:'zab-bridge',channel,type,...obj},'*');
       const parse=u=>{try{const v=new URL(String(u),location.href);return v.origin===origin?v:null;}catch{return null;}};
       function addHeaders(h){try{const entries=h instanceof Headers?h.entries():Array.isArray(h)?h:Object.entries(h||{});for(const [name,value] of entries){if(allowed.includes(String(name).toLowerCase()))headers[String(name).toLowerCase()]=String(value);}}catch{}}
-      function seeRoom(u){const m=/\/rooms\/([0-9a-f-]{36})(?:[/?#]|$)/i.exec(String(u));if(m){currentRoom=m[1];emit('room',{room:currentRoom});}}
+      function seeRoom(u){const m=/\/rooms\/([0-9a-f-]{36})(?:[/?#]|$)/i.exec(location.pathname);if(m&&m[1]!==currentRoom){currentRoom=m[1];emit('room',{room:currentRoom});}}
       function observe(url,response){
         const endpoint=parse(url);if(!endpoint||!response?.ok)return;
         const path=endpoint.pathname;
@@ -80,7 +81,7 @@
         const isProfile=/\/v1\/rooms\/[\da-f-]{36}\/?$/i.test(path)||/\/plots\/|profile|persona|character/i.test(path);
         if(!isMsg&&!isProfile)return;
         response.clone().json().then(v=>{
-          if(isMsg&&Array.isArray(v?.messages))emit('messages',{room:currentRoom,messages:v.messages});
+          if(isMsg&&Array.isArray(v?.messages)){const match=/\/v1\/rooms\/([0-9a-f-]{36})\/messages\/?$/i.exec(path);if(match&&match[1]===currentRoom)emit('messages',{room:currentRoom,messages:v.messages});}
           else if(isProfile){
             const isPersona=/\/user-personas\/(?:select|selected)\/?$/i.test(path);
             emit('profile',{room:currentRoom,profile:isPersona?{userProfile:v}:v,path});collectObservedProfiles(path,v);
@@ -97,8 +98,8 @@
               (!this.responseType||this.responseType==='text')?JSON.parse(this.responseText):null;
             if(!o||typeof o!=='object')return;
             const path=parse(state.url)?.pathname||'';
-            if(/\/v1\/rooms\/[\da-f-]{36}\/messages\/?$/i.test(path)&&Array.isArray(o.messages))
-              emit('messages',{room:currentRoom,messages:o.messages});
+            if(/\/v1\/rooms\/[\da-f-]{36}\/messages\/?$/i.test(path)&&Array.isArray(o.messages)){
+              const match=/\/v1\/rooms\/([0-9a-f-]{36})\/messages\/?$/i.exec(path);if(match&&match[1]===currentRoom)emit('messages',{room:currentRoom,messages:o.messages});}
             else if(/\/v1\/rooms\/[\da-f-]{36}\/?$/i.test(path)||/\/plots\/|profile|persona|character/i.test(path)){
               const persona=/\/user-personas\/(?:select|selected)\/?$/i.test(path);
               emit('profile',{room:currentRoom,profile:persona?{userProfile:o}:o,path});collectObservedProfiles(path,o);
@@ -218,7 +219,7 @@
   }
   installBridge();
   function bridge(action,requestId=''){window.postMessage({tag:'zab-control',channel:bridgeId,action,requestId},'*');}
-  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];baselineReady=false;independentProfileCollector.roomChanged();room=id;postsView='list';detailId='';profilePanelOpen=false;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='저장된 프로필 확인 중';profileRequestRoom='';profileCollectionActive=false;profileDraftSelection={userId:'',characterIds:[]};try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};
+  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);clearTimeout(autoRetryTimer);autoRetryTimer=null;autoWaitUntil=0;autoStage='';pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];seenTurnIds=new Set();lastTurnTime=0;turnEvents=0;baselineReady=false;independentProfileCollector.roomChanged();room=id;postsView='list';detailId='';profilePanelOpen=false;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='저장된 프로필 확인 중';profileRequestRoom='';profileCollectionActive=false;profileDraftSelection={userId:'',characterIds:[]};try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};
     // Only a confirmed snapshot may be used after a reload. Old versions stored IDs
     // but not source content, so those users must import and save once.
     const snapshot=data.settings.savedProfiles;
@@ -264,81 +265,122 @@
   function buildTurns(parts){const result=[],pending=[];const first=parts.findIndex(p=>p.role==='user');const introEnd=first<0?parts.length:first;if(introEnd){result.push({id:'opening-'+parts[0].messageId,intro:true,incomplete:false,parts:parts.slice(0,introEnd),user:[],character:parts.slice(0,introEnd)});}let current=null,last='';for(const p of parts.slice(introEnd)){const id=p.messageId;if(p.role==='user'){pending.push(p);current=null;}else{if(id!==last||!current){current={id:'turn-'+id,intro:false,incomplete:false,user:pending.splice(0),character:[],parts:[]};current.parts.push(...current.user);result.push(current);}current.character.push(p);current.parts.push(p);}last=id;}if(pending.length)result.push({id:'incomplete-'+pending[0].messageId,incomplete:true,intro:false,user:[...pending],character:[],parts:[...pending]});return result;}
   let observedTurns=[],turnContent=new Map(),acceptedFingerprints=new Map(),roomRevision=0;
   function fingerprint(t){return t.parts.map(p=>p.messageId+'|'+p.role+'|'+p.text).join('\n');}
-  function processMessages(msgs,latest=false){
-    if(!room||!data)return;
-    const normalized=normalize(msgs);if(!normalized.length)return;
-    const all=buildTurns(normalized);
+  // A character answer belongs to the USER message that prompted it. Revisions
+  // of the answer keep the same key, whereas another USER message gets a new key.
+  function turnGroups(msgs){
+    const normalized=normalize(msgs),all=buildTurns(normalized);
     const complete=all.filter(t=>!t.incomplete&&!t.intro&&t.character.length);
-    const groups=[];let current=null,lastUserAnchor='';
+    const groups=[];let lastUserAnchor='';
     for(const t of complete){
-      const parent=t.user.map(x=>x.messageId).join(',');
+      const parent=t.user.map(p=>p.messageId).join(',');
       if(parent)lastUserAnchor=parent;
       const key=lastUserAnchor?'user-'+lastUserAnchor:t.id;
-      if(!current||current.key!==key){current={key,turn:t};groups.push(current);}
-      else current.turn=t; // alternative character answers after one user message
+      const time=Math.max(0,...t.parts.map(p=>Date.parse(p.time)||0));
+      if(groups.length&&groups[groups.length-1].key===key)groups[groups.length-1]={key,turn:t,time};
+      else groups.push({key,turn:t,time});
     }
-    const logical=groups.map(g=>g.key);
-    if(!logical.length&&baselineReady)return;
-    const last=groups.at(-1),lastKey=last?.key||'',lastHash=last?fingerprint(last.turn):'';
-    // A response from a different endpoint may be an older/partial view. Do not
-    // replace a known current tail with a snapshot whose tail is already in history.
-    if(baselineReady&&lastKey&&lastKey!==activeTurnKey&&lastTurnKeys.includes(lastKey))return;
-    if(baselineReady){
-      const previous=activeTurnKey;
-      const oldIndex=logical.indexOf(previous);
-      const newKeys=oldIndex>=0?logical.slice(oldIndex+1):logical.filter(k=>!lastTurnKeys.includes(k));
-      const advanced=previous?newKeys.length:0;
-      const replacedSameTurn=lastKey&&lastKey===previous&&lastHash!==activeTurnHash;
-      if(replacedSameTurn){
-        invalidatePending('최근 답변 변경 감지 · 생성 대기 다시 시작');
-      } else if(previous&&lastKey&&oldIndex<0&&advanced===0){
-        // A history rewrite or reroll can replace the old message ID entirely.
-        // Do not increment until a later confirmed user/character turn appears.
-        invalidatePending('대화가 변경되어 생성 대기를 취소했어요.');
-      }
-      if(advanced>0){
-        const lastBatch=currentBoard().lastBatch;
-        if(lastBatch?.temporary){lastBatch.temporary=false;saved();}
-        if(data.settings.auto&&currentBoard().started){
-          turnCount+=advanced;
-          if(turnCount>=num(data.settings.turns,1,999,1))scheduleAuto(lastKey,lastHash);
-          else show('새 턴 '+advanced+'개 · '+turnCount+'/'+data.settings.turns+'턴');
-        }
-      } else if(replacedSameTurn&&data.settings.auto&&currentBoard().started&&turnCount>=data.settings.turns){
-        scheduleAuto(lastKey,lastHash);
-      }
-    }
-    observedTurns=groups.map(g=>g.turn);
-    lastTurnKeys=logical;activeTurnKey=lastKey;activeTurnHash=lastHash;baselineReady=true;
+    return {groups,normalized};
+  }
+  function acceptBaseline(groups){
+    for(const g of groups)seenTurnIds.add(g.key);
+    if(groups.length){const last=groups[groups.length-1];activeTurnKey=last.key;activeTurnHash=fingerprint(last.turn);lastTurnTime=Math.max(lastTurnTime,last.time);}
+    lastTurnKeys=groups.map(g=>g.key);baselineReady=true;
+  }
+  function processMessages(msgs,latest=false){
+    if(!room||!data)return;
+    const {groups,normalized}=turnGroups(msgs);
+    if(!normalized.length)return;
     if(latest)lastRawMessageSnapshot=normalized;
+    observedTurns=groups.map(g=>g.turn);
+    if(!baselineReady){acceptBaseline(groups);renderStatus();return;}
+    if(!groups.length)return;
+    const incoming=groups[groups.length-1];
+    const lastKey=incoming.key,lastHash=fingerprint(incoming.turn);
+    const overlap=groups.map((g,i)=>seenTurnIds.has(g.key)?i:-1).filter(i=>i>=0);
+    const lastOverlap=overlap.length?overlap[overlap.length-1]:-1;
+    // Old/partial snapshots must not undo the latest known tail.
+    if(seenTurnIds.has(lastKey)&&lastKey!==activeTurnKey)return;
+    const novel=groups.filter((g,i)=>!seenTurnIds.has(g.key)&&(
+      lastOverlap>=0?i>lastOverlap:seenTurnIds.size===0&&currentBoard().started||(g.time>0&&lastTurnTime>0&&g.time>lastTurnTime)));
+    // If there is no overlap or comparable timestamp, avoid counting history
+    // as new, but retain known IDs for future request reconciliation.
+    if(novel.length){
+      for(const g of novel)seenTurnIds.add(g.key);
+      const count=novel.length;
+      turnEvents+=count;
+      if(data.settings.auto&&currentBoard().started){
+        turnCount+=count;
+        const previousBatch=currentBoard().lastBatch;
+        if(previousBatch?.temporary){previousBatch.temporary=false;saved();}
+        if(turnCount>=num(data.settings.turns,1,999,1))scheduleAuto(lastKey,lastHash);
+        else show('새 턴 '+count+'개 · '+turnCount+'/'+data.settings.turns+'턴');
+      }
+    }else if(lastKey===activeTurnKey&&lastHash!==activeTurnHash){
+      // Same USER anchor => reroll/edit, not a new turn.
+      invalidatePending('최근 답변 변경 감지 · 15초 대기 재시작');
+      if(data.settings.auto&&currentBoard().started&&turnCount>=data.settings.turns) scheduleAuto(lastKey,lastHash);
+    }else if(lastOverlap<0&&!seenTurnIds.has(lastKey)){
+      // Truncated history without common anchors: rebase cautiously.
+      for(const g of groups)seenTurnIds.add(g.key);
+    }
+    if(novel.length||lastKey===activeTurnKey){
+      activeTurnKey=lastKey;activeTurnHash=lastHash;
+      lastTurnTime=Math.max(lastTurnTime,incoming.time);
+      lastTurnKeys=groups.map(g=>g.key);
+    }
+    // Bounded memory: enough anchors to reconcile overlapping latest-100 pages.
+    if(seenTurnIds.size>1500)seenTurnIds=new Set([...seenTurnIds].slice(-900));
     renderStatus();
   }
   let lastRawMessageSnapshot=[];
-  function invalidatePending(reason){clearTimeout(autoTimer);autoTimer=null;pendingAutoCheck=null;cancelBusy(false);const b=currentBoard();if(b.lastBatch?.temporary){rollback(b.lastBatch);b.lastBatch=null;saved();}if(reason)show(reason);}
+  function invalidatePending(reason){
+    clearTimeout(autoTimer);autoTimer=null;clearTimeout(autoRetryTimer);autoRetryTimer=null;
+    autoWaitUntil=0;autoStage='';pendingAutoCheck=null;cancelBusy(false);
+    const b=currentBoard();if(b.lastBatch?.temporary){rollback(b.lastBatch);b.lastBatch=null;saved();}
+    if(reason)show(reason);
+  }
   function rollback(batch){if(!batch||!data)return;const board=currentBoard();board.posts=board.posts.filter(p=>!batch.created.includes(p.id));for(const p of board.posts){p.comments=p.comments.filter(c=>!batch.comments.includes(c.id));for(const c of p.comments)c.replies=c.replies.filter(r=>!batch.comments.includes(r.id));const old=batch.metrics?.[p.id];if(old){p.views=old.views;p.likes=old.likes;}}board.unread=Math.max(0,board.unread-(batch.created?.length||0));}
   function scheduleAuto(key,hash){
-    clearTimeout(autoTimer);pendingAutoCheck=null;
+    clearTimeout(autoTimer);clearTimeout(autoRetryTimer);autoRetryTimer=null;pendingAutoCheck=null;
     if(busy||!data?.settings.auto||!currentBoard().started)return;
     if(!getKey()){show('자동 생성 대기 · API 키를 설정하세요.');return;}
     if(!profileReady()){show('자동 생성 대기 · '+profileSelectionStatus());return;}
-    show('게시글 생성 대기 중');
+    autoStage='waiting';autoWaitUntil=now()+15000;
+    show('게시글 생성 대기 중 · 15초');
     const epoch=runEpoch,roomAt=room,comm=data.settings.selected;
     autoTimer=setTimeout(()=>{
+      autoTimer=null;autoWaitUntil=0;
       if(epoch!==runEpoch||roomAt!==room||comm!==data?.settings.selected)return;
-      const requestId=uid();pendingAutoCheck={requestId,epoch,roomAt,comm,key,hash};
-      bridge('latest',requestId);
-      setTimeout(()=>{if(pendingAutoCheck?.requestId!==requestId)return;pendingAutoCheck=null;show('자동 생성 보류 · 최신 대화 확인 시간 초과');},9000);
+      verifyAutoTurn({epoch,roomAt,comm,key,hash},0);
     },15000);
+  }
+  function verifyAutoTurn(ref,attempt){
+    if(ref.epoch!==runEpoch||ref.roomAt!==room||ref.comm!==data?.settings.selected||!data.settings.auto)return;
+    autoStage='verifying';
+    const requestId=uid();pendingAutoCheck={...ref,requestId,attempt};renderStatus();
+    bridge('latest',requestId);
+    setTimeout(()=>{
+      if(pendingAutoCheck?.requestId!==requestId)return;
+      pendingAutoCheck=null;retryAutoTurn(ref,attempt,'최신 대화 확인 시간 초과');
+    },9000);
+  }
+  function retryAutoTurn(ref,attempt,message){
+    if(ref.epoch!==runEpoch||ref.roomAt!==room||ref.comm!==data?.settings.selected)return;
+    if(ref.key!==activeTurnKey||ref.hash!==activeTurnHash)return;
+    if(attempt>=2){autoStage='failed';show('자동 생성 보류 · '+message);renderStatus();return;}
+    autoStage='retry';show('최신 대화 재확인 '+(attempt+1)+'/2회');
+    clearTimeout(autoRetryTimer);
+    autoRetryTimer=setTimeout(()=>{autoRetryTimer=null;verifyAutoTurn(ref,attempt+1);},3000*(attempt+1));
   }
   function completeAutoCheck(message){
     const check=pendingAutoCheck;
     if(!check||message.requestId!==check.requestId)return;
     pendingAutoCheck=null;
-    if(!message.ok){show('자동 생성 보류 · 최신 대화 조회 실패');return;}
+    if(!message.ok){retryAutoTurn(check,check.attempt,'최신 대화 조회 실패');return;}
     if(check.epoch!==runEpoch||check.roomAt!==room||check.comm!==data?.settings.selected||!data.settings.auto||busy)return;
     if(check.key!==activeTurnKey||check.hash!==activeTurnHash)return;
     if(!profileReady()){show('자동 생성 대기 · '+profileSelectionStatus());return;}
-    generate('auto');
+    autoStage='generating';generate('auto');
   }
   window.addEventListener('message',e=>{const m=e.data;if(e.source!==window||m?.tag!=='zab-bridge'||m.channel!==bridgeId)return;if(m.type==='room'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='state'&&m.room&&UUID.test(m.room))setRoom(m.room);if(m.type==='messages'&&m.room===room){processMessages(m.messages,!!m.latest);lastLiveSync=now();}if(m.type==='latestEnd'&&m.room===room)completeAutoCheck(m);if(m.type==='profile'&&m.room===room&&profileCollectionActive){profileDetection.seen++;profileDetection.lastPath=m.path||'';if(m.path)profileDetection.paths.add(m.path);ingestProfile(m.profile,m.path||'');if(profileWaitTimer&&(profileCache.characters.length||profileCache.users.length))endProfileLoading('프로필 수집됨 · 추가 캐릭터 확인 가능');else updateProfileStatus();}
     if(m.type==='profileComplete'&&m.room===room&&profileCollectionActive){const extra=m.errors?.length?' ('+m.errors.join(' / ').slice(0,160)+')':'';endProfileLoading('수집 완료'+(m.partial?' · 일부 요청 실패':'')+extra);}
@@ -755,8 +797,8 @@
       profilePanelOpen=true;settingsOpen=false;render();return show('필수 프로필 선택이 필요해요. '+profileSelectionStatus());
     }
     if(!board.started&&kind==='auto')return;clearTimeout(autoTimer);const batchToReplace=kind==='regenerate'?board.lastBatch:null;
-    const request={id:uid(),cancelled:false,room,community:data.settings.selected,epoch:runEpoch,request:null};busy=request;reactionTarget=post?.id||'';renderStatus();try{const prompt=promptPayload(kind==='react'?'react':'generate',post);const model=data.settings.model||models[0];const body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.9,responseMimeType:'application/json',maxOutputTokens:8192}};const res=await generateWithFallback(key,model,body,request);if(request.cancelled||busy!==request||request.room!==room||request.community!==data?.settings.selected||request.epoch!==runEpoch)return;const result=parseGemini(res);if(kind==='regenerate'&&batchToReplace&&board.lastBatch!==batchToReplace)throw Error('재생성 대상이 변경되었습니다.');const next=applyResult(result,kind,batchToReplace);if(kind==='manual'||kind==='auto'){turnCount=0;}if(kind==='regenerate'){next.temporary=batchToReplace?.temporary||false;saved();}show('게시판 갱신 완료 · 새 게시글 '+next.created.length+'개');render();}
-    catch(e){if(!request.cancelled)show('게시글 생성 실패: '+e.message);}finally{if(busy===request)busy=null;reactionTarget='';render();}
+    const request={id:uid(),cancelled:false,room,community:data.settings.selected,epoch:runEpoch,request:null};busy=request;reactionTarget=post?.id||'';renderStatus();try{const prompt=promptPayload(kind==='react'?'react':'generate',post);const model=data.settings.model||models[0];const body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.9,responseMimeType:'application/json',maxOutputTokens:8192}};const res=await generateWithFallback(key,model,body,request);if(request.cancelled||busy!==request||request.room!==room||request.community!==data?.settings.selected||request.epoch!==runEpoch)return;const result=parseGemini(res);if(kind==='regenerate'&&batchToReplace&&board.lastBatch!==batchToReplace)throw Error('재생성 대상이 변경되었습니다.');const next=applyResult(result,kind,batchToReplace);if(kind==='manual'||kind==='auto'){turnCount=0;autoStage='';if(kind==='manual'&&baselineReady){const {groups}=turnGroups(lastRawMessageSnapshot);if(groups.length)acceptBaseline(groups);}}if(kind==='regenerate'){next.temporary=batchToReplace?.temporary||false;saved();}show('게시판 갱신 완료 · 새 게시글 '+next.created.length+'개');render();}
+    catch(e){if(!request.cancelled)show('게시글 생성 실패: '+e.message);}finally{if(busy===request)busy=null;reactionTarget='';if(kind==='auto'&&turnCount>=data?.settings.turns&&data?.settings.auto&&!autoTimer&&activeTurnKey&&!request.cancelled&&autoStage==='generating')scheduleAuto(activeTurnKey,activeTurnHash);render();}
   }
   function chooseNick(){if(data.settings.userNickMode==='custom'&&data.settings.userNick.trim())return short(data.settings.userNick,60);const c=currentCommunity();if(c.id==='everytime')return'익명';if(c.id==='blind')return'익명';return '익명 주민';}
   function makeOwnPost(title,body){if(!title.trim()||!body.trim())return show('제목과 본문을 입력해 주세요.');const b=currentBoard();b.posts.push({id:uid(),title:short(title,180),body:short(body,8500),nick:chooseNick(),residentId:'user',views:0,likes:0,time:now(),source:'user',comments:[]});saved();postsView='list';render();}
@@ -765,7 +807,7 @@
   function resetCommunity(){if(!confirm('현재 커뮤니티의 게시글·댓글·주민 기록을 모두 삭제할까요?'))return;invalidatePending('');runEpoch++;turnCount=0;data.boards[data.settings.selected]=blankBoard();saved();postsView='list';render();}
   function stats(c){return {views:c.views||0,likes:c.likes||0,comments:c.comments.reduce((n,x)=>n+1+x.replies.length,0)};}
   function sortedPosts(){const b=currentBoard();return [...b.posts].sort((a,z)=>b.sort==='recent'?z.time-a.time:((z.likes*5+stats(z).comments*3+z.views/20)/(1+Math.max(0,(now()-z.time)/86400000)*.1))-((a.likes*5+stats(a).comments*3+a.views/20)/(1+Math.max(0,(now()-a.time)/86400000)*.1)));}
-  function renderStatus(){if(!panel)return;const el=panel.querySelector('#zab-status');if(el){el.textContent=busy?'게시글 생성 중…':now()<noticeUntil?notice:data?'자동 '+(data.settings.auto?'ON':'OFF')+' · '+turnCount+'/'+data.settings.turns+'턴'+(data.settings.auto&&!currentBoard().started?' · 첫 수동 생성 필요':data.settings.auto&&!profileReady()?' · 프로필 선택 필요':''):'채팅방 연결 대기 중';}const count=launcher?.querySelector('.zab-unread');if(count)count.textContent=data?.boards?.[data.settings.selected]?.unread?'●':'';const cancel=panel.querySelector('#zab-cancel');if(cancel)cancel.hidden=!busy;}
+  function renderStatus(){if(!panel)return;const el=panel.querySelector('#zab-status');if(el){const phase=autoStage==='waiting'?' · 생성 대기 중':autoStage==='verifying'?' · 최신 대화 확인 중':autoStage==='retry'?' · 조회 재시도 중':autoStage==='failed'?' · 조회 실패':'';el.textContent=busy?'게시글 생성 중…':now()<noticeUntil?notice:data?'자동 '+(data.settings.auto?'ON':'OFF')+' · '+turnCount+'/'+data.settings.turns+'턴'+(data.settings.auto&&!currentBoard().started?' · 첫 수동 생성 필요':data.settings.auto&&!profileReady()?' · 프로필 선택 필요':phase):'채팅방 연결 대기 중';}const count=launcher?.querySelector('.zab-unread');if(count)count.textContent=data?.boards?.[data.settings.selected]?.unread?'●':'';const cancel=panel.querySelector('#zab-cancel');if(cancel)cancel.hidden=!busy;}
   const tabs=[['basic','기본 설정'],['api','API 설정'],['ai','AI 설정'],['community','커뮤니티 관리'],['people','주민·닉네임'],['data','데이터 관리']];
   function mount(){if(panel||!document.body)return;const style=document.createElement('style');style.textContent=`
   #zab-launch{position:fixed;right:13px;bottom:calc(95px + env(safe-area-inset-bottom,0px));border:1px solid #c4cad3;background:#fff;color:#222;border-radius:999px;padding:10px 14px;font:700 13px system-ui;box-shadow:0 4px 18px #0003;z-index:2147483600;touch-action:none}
@@ -844,5 +886,5 @@
   window.addEventListener('resize',applySize);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
   // Only expose non-sensitive diagnostic information. Authentication never leaves the Zeta page bridge.
-  window.zetaAnonymousBoardDiagnostics=()=>({version:VERSION,room,turnCount,turns:observedTurns.length,auto:!!data?.settings.auto,community:data?.settings.selected,busy:!!busy,profileCandidates:{users:profileCache.users.length,characters:profileCache.characters.length},profileChosen:profileSelection().valid,started:!!data?.boards?.[data?.settings?.selected]?.started});
+  window.zetaAnonymousBoardDiagnostics=()=>({version:VERSION,room,turnCount,turns:observedTurns.length,auto:!!data?.settings.auto,community:data?.settings.selected,busy:!!busy,profileCandidates:{users:profileCache.users.length,characters:profileCache.characters.length},profileChosen:profileSelection().valid,started:!!data?.boards?.[data?.settings?.selected]?.started,baselineReady,seenTurns:seenTurnIds.size,activeTurnKey,turnEvents,autoStage,lastLiveSync});
 })();
