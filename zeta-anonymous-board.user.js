@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.8.6
+// @version      0.8.7
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.8.6', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.8.7', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -369,7 +369,7 @@
       profileCache={users:[storedUser],characters:storedChars,plot:null};
       profileDraftSelection={userId:profileKey(storedUser),characterIds:storedChars.map(profileKey)};
       profileInfo='저장된 프로필 불러옴 · 자동 재감지 안 함';
-    }else{profileInfo='저장된 프로필 없음 · 불러오기 → 수정 → 저장';}
+    }else{profileInfo='저장된 프로필 없음';}
     if(!data.settings.fallbackPreferenceV014){if(!data.settings.fallback)data.settings.fallback='gemini-3.1-flash-lite';data.settings.fallbackPreferenceV014=true;saved();}if(['apartment','dating'].includes(data.settings.selected))data.settings.selected='everytime';render();setTimeout(()=>{if(room!==id)return;bridge('state');bridge('latest');profileRequestRoom=id;},650);}
   function endProfileLoading(message){
     clearTimeout(profileWaitTimer);profileWaitTimer=null;
@@ -968,7 +968,9 @@
   }
   function updateProfileStatus(){
     const el=panel?.querySelector('#zab-profile-status');
-    if(el)el.textContent=`${profileInfo} · 불러온 후보: 캐릭터 ${profileCache.characters.length}명 · 유저 ${profileCache.users.length}개`;
+    if(el)el.textContent=profileInfo;
+    const count=panel?.querySelector('#zab-profile-count');
+    if(count)count.textContent=`불러온 후보: 캐릭터 ${profileCache.characters.length}명 · 유저 ${profileCache.users.length}개`;
     const list=panel?.querySelector('#zab-profile-selection-status');
     if(list)list.textContent=profileSelectionStatus();
     renderStatus();
@@ -1519,7 +1521,7 @@
       data=blankRoom(initialRoom);
       profileCache={characters:[],users:[],plot:null};
       profileDraftSelection={userId:'',characterIds:[]};
-      profileInfo='저장된 프로필 없음 · 불러오기 → 수정 → 저장';
+      profileInfo='저장된 프로필 없음';
       profilePanelOpen=false;settingsOpen=true;settingTab='data';
       render();show('모든 채팅방의 게시판 데이터를 초기화했어요. 공통 기본/API 설정은 유지됩니다.');
     }catch(e){show('전체 초기화 실패: '+e.message);}
@@ -1695,7 +1697,8 @@
   #zab-panel .zab-profile-section-heading button{padding:5px 9px;min-height:30px}
   #zab-panel .zab-profile-load-actions{display:flex;align-items:center;justify-content:flex-start;margin:0 0 4px}
   #zab-panel .zab-profile-load-actions button{margin:0}
-  #zab-panel #zab-profile-status{margin:4px 0 10px;line-height:1.5}
+  #zab-panel .zab-profile-status-lines{margin:4px 0 10px;line-height:1.5}
+  #zab-panel .zab-profile-status-lines span{display:block}
   #zab-panel .zab-settings-section h4.zab-main-settings-heading{font-size:15px;font-weight:700;line-height:1.4;margin:4px 0 12px}
   #zab-panel .zab-settings-section .zab-divider:has(+ .zab-main-settings-heading){margin:20px 0 16px}
   #zab-panel .zab-setting-segment{gap:4px}
@@ -1955,7 +1958,7 @@
   function renderProfilePanel(){
     const profiles=data?.settings?.profiles||{};
     return `<div class="zab-profile-load-actions">${btn('refresh-profiles','제타 프로필 불러오기','zab-primary')}</div>
-      <p class="zab-note" id="zab-profile-status">${esc(profileInfo)} · 불러온 후보: 캐릭터 ${profileCache.characters.length}명 · 유저 ${profileCache.users.length}개</p>
+      <p class="zab-note zab-profile-status-lines"><span id="zab-profile-status">${esc(profileInfo)}</span><span id="zab-profile-count">불러온 후보: 캐릭터 ${profileCache.characters.length}명 · 유저 ${profileCache.users.length}개</span></p>
       ${renderProfileChoices()}
       ${!profileCache.characters.length&&!profileCache.users.length?`<p class="zab-note">저장된 프로필이 없어요. 불러오기를 눌러 제타에서 가져온 뒤 수정하고 저장하세요.</p>`:''}
       <div class="zab-divider"></div><h4>정보 보완</h4>
@@ -1963,8 +1966,7 @@
       <p class="zab-note">세계관 설명을 입력해도 필수 프로필 선택이 생략되지는 않아요.</p>`;
   }
   function renderSettings(){const s=data.settings;return `<div class="zab-settings-topline">${btn('settings-back','← 게시판으로')}<span class="zab-settings-top-title">설정</span></div><div class="zab-tabs">${tabs.map(([id,name])=>btn('tab:'+id,name,settingTab===id?'active':'')).join('')}</div><div class="zab-section zab-settings-section">${settingTab==='basic'?`<h4 class="zab-main-settings-heading">테마</h4><label>화면 모드</label>${themeButtons()}<div class="zab-divider"></div><h4 class="zab-main-settings-heading">공통 설정</h4><p class="zab-note">공통 설정은 모든 채팅방에서 공유됩니다. 아래 채팅방별 설정과 실제 턴 카운트·자동 생성 진행 상태는 채팅방마다 유지됩니다.</p>${onOffSegment('auto','자동 갱신')}<label>자동 갱신 주기 (턴)</label>${inp('turns',s.turns,'number','min="1" max="999" step="1"')}<label>자동 생성 대기 시간 (초)</label>${inp('autoDelaySeconds',num(s.autoDelaySeconds,1,300,10),'number','min="1" max="300" step="1"')}<p class="zab-note">기본 대기 10초 · 설정 범위 1~300초 · 신규 턴 감지 후 대기</p><div class="zab-divider"></div><h4>AI 생성 설정</h4><label>새 게시글 수</label>${inp('posts',s.posts,'number','min="1" max="15"')}<label>새 게시글당 최대 댓글 수</label>${inp('newComments',s.newComments,'number','min="0" max="30"')}<label>기존 글 추가 댓글 전체 최대 개수</label>${inp('oldComments',s.oldComments,'number','min="0" max="100"')}<label>기존 댓글 추가 대상 최근 게시글 수</label>${inp('oldPostWindow',s.oldPostWindow,'number','min="0" max="300"')}<label>공개적으로 목격된 새 사건이 없을 때</label>${settingsSegment('quiet',[['daily','일상 게시글 생성'],['skip','게시글 생성 안 함'],['rumors','기존 소문 이어가기']],'공개적으로 목격된 새 사건이 없을 때')}<div class="zab-divider"></div><h4>게시판 표시 설정</h4>${onOffSegment('showParticipationDot','게시글 카드 참여 표시')}${onOffSegment('highlightPostAuthor','게시글 작성자 댓글 강조')}<div class="zab-divider"></div><h4 class="zab-main-settings-heading">채팅방별 설정</h4><h4>날짜·시간 설정</h4><label>게시글과 댓글에 표시할 시간 기준</label>${timeModeButtons()}<p class="zab-note">RP 시간은 가장 최근 턴의 코드블록/InfoBox 상태창에서 읽으며, 날짜 또는 시간만 있으면 확인된 항목만 표시합니다.</p>`:
-  settingTab==='community'?`<h4>프로필/커뮤니티</h4>
-  <div class="zab-flex zab-profile-section-heading"><strong>프로필 불러오기</strong>${btn('toggle-profile-section',profileSectionOpen?'접기':'펼치기')}</div>
+  settingTab==='community'?`<div class="zab-flex zab-profile-section-heading"><strong>프로필 불러오기</strong>${btn('toggle-profile-section',profileSectionOpen?'접기':'펼치기')}</div>
   ${profileSectionOpen?renderProfilePanel():`<p class="zab-note">${esc(profileSelectionStatus())}</p>`}
   <div class="zab-divider"></div><h4>② 커뮤니티 설정</h4>
   <label>현재 커뮤니티</label>
