@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.5.4
+// @version      0.5.5
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.5.4', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.5.5', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -964,6 +964,7 @@
       const c=d.custom;
       if(!short(c.name,80))return show('커뮤니티 이름을 입력해 주세요.');
       if(!short(c.title,100))return show('게시판 이름을 입력해 주세요.');
+      if(!/^#[0-9a-f]{6}$/i.test(c.color))return show('강조색은 #FFFFFF처럼 #RRGGBB 형식으로 입력해 주세요.');
       id='custom-'+uid();
       s.custom.push({id,name:short(c.name,80),desc:short(c.desc,2000),nick:'익명 주민',style:short(c.style,2000),styleExample:short(c.example,2000),color:/^#[0-9a-f]{6}$/i.test(c.color)?c.color:'#505969'});
       d.title=short(c.title,100);
@@ -1504,6 +1505,11 @@
   #zab-panel .zab-theme-switch button{border:0;background:transparent;color:var(--zab-muted);border-radius:8px;padding:6px 10px;min-height:30px;font-size:12px;font-weight:600;white-space:nowrap}
   #zab-panel .zab-theme-switch button.is-active{background:var(--zab-surface2);color:var(--zab-text)}
   #zab-panel .zab-theme-switch button:focus-visible{outline:2px solid var(--zab-accent);outline-offset:2px}
+
+  /* v0.5.5 custom community HEX input alongside color picker */
+  #zab-panel .zab-color-control{display:flex;align-items:center;gap:10px}
+  #zab-panel .zab-color-control input[data-custom-hex="yes"]{flex:1;min-width:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+  #zab-panel .zab-color-control input[type=color]{flex:0 0 47px;width:47px!important;height:39px;min-height:39px;padding:4px;cursor:pointer;border-radius:9px}
   `;document.documentElement.appendChild(style);launcher=document.createElement('button');launcher.type='button';launcher.id='zab-launch';launcher.innerHTML='익명 게시판 <span class="zab-unread"></span>';panel=document.createElement('section');panel.id='zab-panel';panel.hidden=true;panel.innerHTML='<div class="zab-head" id="zab-drag"><strong id="zab-community-title">익명 게시판</strong><button data-act="settings" aria-label="설정" title="설정">⚙️</button><button data-act="close" aria-label="닫기" title="닫기">×</button></div><div class="zab-content" id="zab-main"></div><div class="zab-footer"><span class="zab-status" id="zab-status">채팅방 연결 대기 중</span><button id="zab-cancel" data-act="cancel" hidden>생성 취소</button></div><div class="zab-resize" id="zab-resize">◢</div>';
     document.body.append(launcher,panel);launcher.addEventListener('click',()=>{if(launcher.dataset.dragging==='yes'){launcher.dataset.dragging='';return;}panel.hidden=!panel.hidden;if(!panel.hidden){const b=currentBoard();b.unread=0;saved();render();applySize();}});
     try{window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',applyTheme);}catch{}
@@ -1579,7 +1585,7 @@
   ${selection('selected',communityDraft?.id||s.selected,[...presets,...s.custom].map(c=>[c.id,c.name]).concat([['__new_custom__','＋ 사용자 지정 커뮤니티']]))}
   ${communityDraft?.id==='gallery'?`<label>갤러리 소개·주제</label><textarea data-gallery-topic="yes" rows="3" placeholder="예: 우리 학교 학생들의 일상과 소문">${esc(communityDraft.galleryDescription)}</textarea>`:''}
   ${communityDraft?.id==='__new_custom__'?`
-    <label>강조색</label><input type="color" data-community-field="color" value="${esc(communityDraft.custom.color)}" aria-label="커뮤니티 강조색">
+    <label>강조색 (HEX)</label><div class="zab-color-control"><input type="text" data-custom-hex="yes" maxlength="7" spellcheck="false" autocapitalize="off" autocomplete="off" value="${esc(communityDraft.custom.color)}" placeholder="#FFFFFF" aria-label="커뮤니티 강조색 HEX"><input type="color" data-community-field="color" value="${esc(/^#[0-9a-f]{6}$/i.test(communityDraft.custom.color)?communityDraft.custom.color:'#505969')}" aria-label="강조색 팔레트에서 선택"></div>
     <label>커뮤니티 이름</label><input data-community-field="name" maxlength="80" value="${esc(communityDraft.custom.name)}" placeholder="예: 캠퍼스 대나무숲">
     <label>게시판 이름</label><input data-community-field="title" maxlength="100" value="${esc(communityDraft.custom.title)}" placeholder="예: 자유게시판">
     <label>커뮤니티 소개</label><textarea data-community-field="desc" rows="3" placeholder="예: 성격·분위기">${esc(communityDraft.custom.desc)}</textarea>
@@ -1632,9 +1638,9 @@
       }
       return;
     }
-    if(el.dataset.communityField==='color'){if(!communityDraft)startCommunityDraft();communityDraft.custom.color=/^#[0-9a-f]{6}$/i.test(el.value)?el.value:'#505969';return;}if(el.dataset.galleryTopic==='yes'){if(!communityDraft)startCommunityDraft();communityDraft.galleryDescription=short(el.value,2000);refreshCommunityConfirmButton();return;}if(el.dataset.communityField){if(!communityDraft)startCommunityDraft();communityDraft.custom[el.dataset.communityField]=short(el.value,el.dataset.communityField==='name'?80:el.dataset.communityField==='title'?100:2000);refreshCommunityConfirmButton();return;}if(el.dataset.communityTitle==='yes'){if(!communityDraft)startCommunityDraft();communityDraft.title=short(el.value,100);refreshCommunityConfirmButton();return;}if(!el.dataset.resident)return;const r=currentBoard().residents[el.dataset.resident];if(r){r.nick=short(el.value,60);saved();}}
+    if(el.dataset.customHex==='yes'){if(!communityDraft)startCommunityDraft();const color=el.value.trim();communityDraft.custom.color=color;if(/^#[0-9a-f]{6}$/i.test(color)){const picker=panel?.querySelector('input[data-community-field="color"]');if(picker)picker.value=color;}refreshCommunityConfirmButton();return;}if(el.dataset.communityField==='color'){if(!communityDraft)startCommunityDraft();communityDraft.custom.color=el.value;const hex=panel?.querySelector('input[data-custom-hex="yes"]');if(hex)hex.value=el.value.toUpperCase();refreshCommunityConfirmButton();return;}if(el.dataset.galleryTopic==='yes'){if(!communityDraft)startCommunityDraft();communityDraft.galleryDescription=short(el.value,2000);refreshCommunityConfirmButton();return;}if(el.dataset.communityField){if(!communityDraft)startCommunityDraft();communityDraft.custom[el.dataset.communityField]=short(el.value,el.dataset.communityField==='name'?80:el.dataset.communityField==='title'?100:2000);refreshCommunityConfirmButton();return;}if(el.dataset.communityTitle==='yes'){if(!communityDraft)startCommunityDraft();communityDraft.title=short(el.value,100);refreshCommunityConfirmButton();return;}if(!el.dataset.resident)return;const r=currentBoard().residents[el.dataset.resident];if(r){r.nick=short(el.value,60);saved();}}
   function onChange(e){const el=e.target;if(el.id==='zab-import-file'){const file=el.files?.[0];if(file)importJSON(file);el.value='';return;}if(!data)return;
-    if(el.dataset.profileUser==='yes'||el.hasAttribute('data-profile-character')){
+    if(el.dataset.customHex==='yes'){if(!/^#[0-9a-f]{6}$/i.test(el.value.trim()))show('강조색은 #FFFFFF처럼 #RRGGBB 형식으로 입력해 주세요.');return;}if(el.dataset.profileUser==='yes'||el.hasAttribute('data-profile-character')){
       const previous=profileDraftSelection;
       if(el.dataset.profileUser==='yes')previous.userId=el.checked?String(el.value||''):(previous.userId===String(el.value||'')?'':previous.userId);
       else{const id=el.dataset.profileCharacter;const ids=new Set(safeArray(previous.characterIds));if(el.checked)ids.add(id);else ids.delete(id);previous.characterIds=[...ids];}
