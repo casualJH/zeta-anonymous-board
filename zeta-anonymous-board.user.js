@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.9.11
+// @version      0.9.12
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.9.11', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.9.12', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1103,7 +1103,7 @@
   function boardTitlePrompt(){
     const cfg=data.settings,com=currentCommunity(),profiles=profileSelection();
     const formats={
-      everytime:'Return ONLY the university name that is explicitly present in the provided profiles/world/instructions. Do not invent a university. The script will append " 자유게시판". If none is known, return empty boardTitle.',
+      everytime:'Read the user profile, character profiles, world setting and instructions carefully. If an explicitly established university is found (e.g. "아스란 대학교 3학년" means the university name is "아스란 대학교"), return ONLY its full university name INCLUDING the word "대학교" (e.g. "아스란 대학교"), without academic year, department, or "자유게시판". Do not invent or guess any school. If no university name is confirmed, return an empty string in boardTitle. The script will append " 자유게시판".',
       gallery:'Invent a natural Korean DC Inside-style gallery TOPIC based on the world and profiles, not a character name. Return ONLY the topic without " 갤러리"; e.g. 해외 축구, 대학생.',
       neighborhood:'Invent a natural Korean neighborhood-based NAVER CAFE name, not just a place name. Freely choose the cafe name; "천호동 · 동네 이야기" is just one possible format. Do not claim an unconfirmed real neighborhood exists. The name must sound like a local residents cafe (neighborhood, neighbors, residents, village, apartment, local moms, local chat or community).',
       reddit:'Create an English subreddit TOPIC/name based on the world/profiles. Return ONLY 3-21 ASCII letters, digits or underscores; the script adds r/. Never use character or user names.',
@@ -1138,27 +1138,10 @@
     if(communityId==='blind')return '토픽·블라블라';
     if(communityId==='x')return '타임라인';
     if(communityId==='everytime'){
+      // Gemini chooses the school. Do not compare against profile/world strings.
+      // Format the returned name only; the prompt requires the full name including "대학교".
       const university=title.replace(/\s*자유게시판$/,'').trim();
-      if(!/(?:대학교|대학|University|College|Institute)/i.test(university))return '';
-      // Normalize whitespace and Korean 대학/대학교 variants without inventing a school.
-      const normalizeSchool=value=>String(value||'').normalize('NFKC').toLowerCase().replace(/[\s·ㆍ._-]+/g,'').replace(/대학교/g,'대학');
-      const target=normalizeSchool(university);
-      const sources=[...worldTitleTexts(),String(data?.settings?.guide||''),String(data?.settings?.communityGuides?.everytime||'')];
-      const grounded=sources.some(source=>{
-        const text=normalizeSchool(source);
-        let position=text.indexOf(target);
-        while(position>=0){
-          const before=position>0?text[position-1]:'';
-          const after=text[position+target.length]||'';
-          const validBefore=!before||!/[\p{L}]/u.test(before);
-          const validAfter=!after||!/[\p{L}]/u.test(after)||/[0-9]/.test(after);
-          if(validBefore&&validAfter)return true;
-          position=text.indexOf(target,position+1);
-        }
-        return false;
-      });
-      if(!grounded)return '';
-      return short(university+' 자유게시판',100);
+      return university?short(university+' 자유게시판',100):'';
     }
     if(communityId==='office'){
       if(/^(?:officeworkers?|officeculture|workplace|companytalk)$/i.test(title)||/^(?:회사|기업|직장|사무실|조직|우리 회사)$/i.test(title))return '';
