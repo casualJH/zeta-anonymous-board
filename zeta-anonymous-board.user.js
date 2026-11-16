@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.4.1
+// @version      0.4.2
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.4.1', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.4.2', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -323,6 +323,7 @@
     clearTimeout(profileWaitTimer);profileWaitTimer=null;
     profileInfo=message;
     updateProfileStatus();
+    if(settingsOpen&&settingTab==='community'&&profileSectionOpen)render();
   }
   function requestProfiles(){
     if(!room)return show('제타 채팅방을 먼저 열어 주세요.');
@@ -336,6 +337,7 @@
     const already=profileCache.characters.length+profileCache.users.length;
     profileInfo=already?'프로필 '+already+'개 확인 · 추가 캐릭터 확인 중':'프로필 확인 중…';
     updateProfileStatus();
+    if(settingsOpen&&settingTab==='community'&&profileSectionOpen)render();
     // Independent deadline, even when Safari loses bridge completion events.
     profileWaitTimer=setTimeout(()=>{
       if(attempt!==profileAttempt||room!==forRoom)return;
@@ -669,7 +671,7 @@
     }
     if(changed){
       updateProfileStatus();
-      if(profilePanelOpen)render();
+      if(settingsOpen&&settingTab==='community'&&profileSectionOpen)render();
     }
   }
   // Independent profile collector, adapted directly from zeta-current-profiles / zeta-profiles-mob.
@@ -716,7 +718,7 @@
       if(profileWaitTimer&&(profileCache.characters.length||profileCache.users.length)){
         endProfileLoading('프로필 감지 완료 · 유저와 캐릭터를 선택하세요.');
       }else updateProfileStatus();
-      if(profilePanelOpen)render();
+      if(settingsOpen&&settingTab==='community'&&profileSectionOpen)render();
     }
     function process(path,payload,status,forRoom,epoch){
       if(!profileCollectionActive||epoch!==generation||!path||status<200||status>=300)return;
@@ -1331,7 +1333,7 @@
   function inp(name,val,type='text',more=''){return `<input data-setting="${esc(name)}" type="${type}" value="${esc(val)}" ${more}>`;}
   function ta(name,val,rows=3){return `<textarea data-setting="${esc(name)}" rows="${rows}">${esc(val)}</textarea>`;}
   function selection(name,current,opts){return `<select data-setting="${esc(name)}">${opts.map(([id,label])=>`<option value="${esc(id)}" ${id===current?'selected':''}>${esc(label)}</option>`).join('')}</select>`;}
-  function setupGuide(){if(!data||profileReady()&&data.settings.communityConfirmed)return '';const profileDone=profileReady(),communityDone=!!data.settings.communityConfirmed;return `<div class="zab-section"><h4 style="margin:0 0 8px">게시판 시작 설정</h4><p class="zab-note">현재 채팅방에 맞게 한 번만 설정해 주세요.</p><div class="zab-flex"><span>${profileDone?'✓':'①'} 프로필 불러오기 ${profileDone?'완료':'필요'}</span>${btn('setup-profile',profileDone?'확인':'설정')}</div><div class="zab-flex" style="margin-top:8px"><span>${communityDone?'✓':'②'} 커뮤니티 설정 ${communityDone?'완료':'필요'}</span>${btn('setup-community',communityDone?'확인':'설정')}</div></div>`;}
+  function setupGuide(){if(!data||profileReady()&&data.settings.communityConfirmed)return '';return `<div class="zab-section"><div class="zab-flex" style="display:flex;align-items:center;justify-content:space-between;gap:8px"><span style="min-width:0;flex:1;white-space:nowrap;font-size:12px">프로필 불러오기 + 커뮤니티 설정 필요</span><button type="button" data-act="setup-profile" aria-label="프로필/커뮤니티 설정 열기" title="프로필/커뮤니티 설정" style="flex-shrink:0">👤</button></div></div>`;}
   function render(){if(!panel)return;renderStatus();const title=panel.querySelector('#zab-community-title');if(title)title.textContent=data?currentCommunity().name:'익명 게시판';const node=panel.querySelector('#zab-main');if(!node)return;if(!data){node.innerHTML='<p>제타 채팅방을 열고 메시지가 로드되면 연결됩니다.</p>';return;}node.innerHTML=settingsOpen?renderSettings():postsView==='detail'?renderDetail():postsView==='write'?renderWrite():renderList();}
   // Each Everytime post has its own numbering. The author is '익명'
   // on the post and '글쓴이' in replies, with no board-wide number registry.
