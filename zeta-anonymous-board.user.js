@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.9.14
+// @version      0.9.15
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.9.14', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.9.15', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -582,7 +582,7 @@
     const b=currentBoard();if(b.lastBatch?.temporary){rollback(b.lastBatch);b.lastBatch=null;saved();}
     if(reason)show(reason);
   }
-  function rollback(batch){if(!batch||!data)return;const board=currentBoard();board.posts=board.posts.filter(p=>!batch.created.includes(p.id));for(const p of board.posts){p.comments=p.comments.filter(c=>!batch.comments.includes(c.id));for(const c of p.comments)c.replies=c.replies.filter(r=>!batch.comments.includes(r.id));const old=batch.metrics?.[p.id];if(old){p.views=old.views;p.likes=old.likes;for(const c of p.comments)if(old.comments&&Object.prototype.hasOwnProperty.call(old.comments,c.id))c.likes=old.comments[c.id];}}board.unread=Math.max(0,board.unread-(batch.created?.length||0));}
+  function rollback(batch){if(!batch||!data)return;const board=currentBoard();board.posts=board.posts.filter(p=>!batch.created.includes(p.id));for(const p of board.posts){p.comments=p.comments.filter(c=>!batch.comments.includes(c.id));for(const c of p.comments)c.replies=c.replies.filter(r=>!batch.comments.includes(r.id));const old=batch.metrics?.[p.id];if(old){p.views=old.views;p.likes=old.likes;if(old.popularity===undefined)delete p.popularity;else p.popularity=old.popularity;for(const c of p.comments)if(old.comments&&Object.prototype.hasOwnProperty.call(old.comments,c.id))c.likes=old.comments[c.id];}}board.unread=Math.max(0,board.unread-(batch.created?.length||0));}
   function scheduleAuto(key,hash){
     clearTimeout(autoTimer);clearTimeout(autoRetryTimer);autoRetryTimer=null;pendingAutoCheck=null;
     if(busy||!data?.settings.auto||!currentBoard().started)return;
@@ -1202,11 +1202,11 @@
 6. 일반 주민의 독립적인 일상·잡담·주관적 의견, 세계관에 모순되지 않는 가상 가게·회사·지역 등 배경 창작은 허용한다. 단, 그것을 특정 유저·RP 캐릭터에게 일어난 새로운 사건·속마음·관계의 근거로 연결하지 마라.
 7. 이 규칙은 새 게시글의 제목·본문, 댓글·대댓글, 기존 글에 추가하는 반응, 모든 커뮤니티와 소문 이어가기 설정에 동일하게 적용한다. 다른 커뮤니티 지침이나 추가 지침이 충돌하더라도 이 사실 제한을 우선하라.
 8. 작성 전 실제 RP 근거 존재 여부 → 주민의 정보 접근 가능 여부 → 새 사건 창작 여부를 점검하라. 하나라도 불명확하면 유저·캐릭터에 관한 그 주장을 생략하고 관련 없는 주민 일상·일반적인 게시판 주제로 대체하라. 점검 과정은 출력하지 말고 JSON만 출력하라.`;
-    const schema=`JSON 형태: {"posts":[{"title":"제목 원문","titleKo":"제목 한국어 번역","body":"본문 원문","bodyKo":"본문 한국어 번역","company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인인 경우에만 선택된 캐릭터의 프로필 id 또는 _key, 일반 주민이면 빈 문자열","residentId":"재사용할 주민 ID 또는 새 주민용 임의 별칭","views":10,"likes":2,"comments":[{"company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"댓글 원문","textKo":"댓글 한국어 번역","likes":1,"replies":[{"company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"대댓글 원문","textKo":"대댓글 한국어 번역","likes":0}]}]}],"updates":[{"postId":"과거 게시글 ID","comments":[{"company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"추가 댓글 원문","textKo":"추가 댓글 한국어 번역","likes":0,"replies":[]}],"replies":[{"parentCommentId":"기존 사용자 댓글 ID","company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"사용자 댓글에 대한 대댓글 원문","textKo":"대댓글 한국어 번역","likes":0}]}]}. 원본에 없는 postId는 사용 금지.`;
+    const schema=`JSON 형태: {"posts":[{"title":"제목 원문","titleKo":"제목 한국어 번역","body":"본문 원문","bodyKo":"본문 한국어 번역","company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인인 경우에만 선택된 캐릭터의 프로필 id 또는 _key, 일반 주민이면 빈 문자열","residentId":"재사용할 주민 ID 또는 새 주민용 임의 별칭","views":10,"likes":2,"comments":[{"company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"댓글 원문","textKo":"댓글 한국어 번역","likes":1,"replies":[{"company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"대댓글 원문","textKo":"대댓글 한국어 번역","likes":0}]}]}],"updates":[{"postId":"과거 게시글 ID","comments":[{"company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"추가 댓글 원문","textKo":"추가 댓글 한국어 번역","likes":0,"replies":[]}],"replies":[{"parentCommentId":"기존 사용자 댓글 ID","company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"사용자 댓글에 대한 대댓글 원문","textKo":"대댓글 한국어 번역","likes":0}]}]}. 게시글마다 popularity 필드로 low, normal, high 중 하나를 지정하라. 과거 게시글에 대한 인기도 변경은 최상위 popularityUpdates:[{"postId":"기존 게시글 ID","popularity":"low|normal|high"}] 배열에 담아라. 원본에 없는 postId는 사용 금지.`;
     const translationRule=translationOn()?'[번역 ON] 영어 원문 등 해당 커뮤니티에 자연스러운 원문 언어로 먼저 작성하라. 원문 제목·본문·댓글·대댓글은 각각 title/body/text에 넣고, 같은 내용의 자연스럽고 충실한 한국어 번역을 titleKo/bodyKo/textKo에 함께 넣어라. Reddit에서는 영어 원문을 우선 생성하고 영어 인터넷 특유의 표현과 말투를 유지한다. 한국어 번역은 원문 의미를 누락하거나 창작하지 말고 대응시켜라. 모든 AI 신규/추가 댓글/대댓글에 번역 필드를 제공하라. 사용자 원문을 수정하거나 번역하여 다시 내보내지 마라.':'[번역 OFF] 원래 커뮤니티에 어울리는 언어와 말투로 작성하고 한국어 번역 필드는 생략하거나 빈 문자열로 둬라.';
     const userLanguageRule='[사용자 작성글 언어 해석 · 모든 커뮤니티 공통] 사용자가 직접 작성한 게시글·댓글·대댓글은 입력 언어와 관계없이 해당 커뮤니티의 기본 언어로 작성된 발언으로 간주하라. 주민과 RP 캐릭터는 해당 커뮤니티의 기본 언어로 된 발언을 읽은 것처럼 의미와 어조를 이해하고 자연스럽게 반응하라. 답변은 해당 커뮤니티의 언어와 말투를 따르라. 사용자 원문은 수정하지 않고 그대로 보존하라. 입력 언어가 다르다는 이유로 언어 차이를 지적하지 마라.';
     const task=kind==='react'?`아래 사용자 게시글/댓글을 대상으로 AI 주민의 반응만 생성. 새 게시글은 0개. 대상 글 ID=${post?.id||''}. 이전 글 중 해당 글에만 댓글 또는 기존 사용자 댓글에 대한 대댓글을 추가.`:`새 게시글 ${num(s.posts,1,15,3)}개를 목표로 생성하라. 새 게시글당 댓글 최대 ${num(s.newComments,0,30,7)}개. 기존 최근 ${num(s.oldPostWindow,0,300,20)}개 글 중 내용 관련성이 높은 글에만 추가 댓글을 작성하되, 모든 기존 글에 추가되는 댓글·대댓글 총합은 ${num(s.oldComments,0,100,10)}개 이하. 특히 관련성 있는 기존 사용자 댓글(source=user)을 확인해 해당 댓글 ID로 replies를 작성하라. ${s.quiet==='skip'?'공개 사건이 전혀 없다면 게시글과 댓글 생성 생략':s.quiet==='rumors'?'새 사건이 없으면 기존 소문만 이어가기':'새 사건이 없으면 세계관 주민 일상 글 작성'}.`;
-    return `${rpFactRules}\n${instructions}\n${userLanguageRule}\n[번역 출력 규칙] ${translationRule}\n${galleryTopic}\n[사용자 지정 커뮤니티 지침] ${customStyle}\n[커뮤니티별 작성 규칙] ${nicknameOverride&&community.id==='blind'?'블라인드는 여러 회사의 직장인이 참여하는 외부 커뮤니티다. 특정 회사 내부의 비공개 정보는 노출하지 마라. 닉네임은 사용자 추가 지침을 우선하라.':nicknameOverride&&community.id==='office'?'사내 익명 게시판은 RP 세계관의 같은 회사 직원들만 참여한다. 닉네임은 사용자 추가 지침을 우선하라.':communityRules}\n[닉네임 필수 규칙] ${nicknameRule}\n${schema}\n[조회수·좋아요 생성] 기존 게시글의 조회수·좋아요를 갱신하려면 metricUpdates:[{postId,views,likes,commentLikes:[{commentId,likes}]}]를 JSON 최상위에 포함하라. 숫자는 기존 게시글·댓글의 실제 수치와 활동량을 고려해 Gemini가 결정한다. 갱신이 필요 없는 항목은 생략하라. 스크립트는 임의로 숫자를 늘리지 않는다.\n[작업] ${task}\n[커뮤니티] ${JSON.stringify(community)}\n[커뮤니티별 생성 지침] ${short(s.communityGuides?.[community.id]||'',5000)}\n[수집된 프로필] ${JSON.stringify({user:short(s.profiles.user,5000),characters:short(s.profiles.characters,9000),world:short(s.profiles.world,6500),selectedCharacters:profileSelection().characters.slice(0,30),selectedUser:profileSelection().user})}\n[최근 RP 대화 (개인정보 및 비공개 사실은 주민에게 직접 노출 금지)] ${JSON.stringify(recent).slice(0,20000)}\n[기존 주민] ${JSON.stringify(residents).slice(0,7500)}\n[최근 커뮤니티 게시글 · 이전 AI 창작물은 실제 RP 사건의 증거가 아님] ${JSON.stringify(older).slice(0,14000)}\n[사용자 반응 대상] ${JSON.stringify(post||{}).slice(0,5000)}\n[최종 사실 검증] 위 RP 사실 및 정보 접근 제한을 제목·본문·댓글·대댓글 전부에 다시 적용하고, 확인되지 않은 유저·캐릭터의 행동·속마음·소문은 제거하라. JSON 객체만 답하라.`;
+    return `${rpFactRules}\n${instructions}\n${userLanguageRule}\n[번역 출력 규칙] ${translationRule}\n${galleryTopic}\n[사용자 지정 커뮤니티 지침] ${customStyle}\n[커뮤니티별 작성 규칙] ${nicknameOverride&&community.id==='blind'?'블라인드는 여러 회사의 직장인이 참여하는 외부 커뮤니티다. 특정 회사 내부의 비공개 정보는 노출하지 마라. 닉네임은 사용자 추가 지침을 우선하라.':nicknameOverride&&community.id==='office'?'사내 익명 게시판은 RP 세계관의 같은 회사 직원들만 참여한다. 닉네임은 사용자 추가 지침을 우선하라.':communityRules}\n[닉네임 필수 규칙] ${nicknameRule}\n${schema}\n[인기도 판단 · 혼합 시뮬레이션] Gemini는 새 게시글마다 popularity를 low(관심 낮음), normal(일반), high(화제) 중 하나로 판단하고 JSON posts[].popularity에 넣어라. 기존 게시글 중 인기 변화가 필요한 글은 popularityUpdates:[{postId,popularity}]로 반환하라. 기존 글을 재평가하지 않으면 저장된 인기도를 유지한다. 기존 글의 조회수·좋아요 숫자 자체는 반환하지 마라. 스크립트가 Gemini의 인기도 판정에 따라 경과 시간을 고려하여 조회수·좋아요를 증가시킨다. 사용자·RP 캐릭터의 실제 사건이나 행동을 인기 판정의 근거로 새로 창작하지 마라.\n[작업] ${task}\n[커뮤니티] ${JSON.stringify(community)}\n[커뮤니티별 생성 지침] ${short(s.communityGuides?.[community.id]||'',5000)}\n[수집된 프로필] ${JSON.stringify({user:short(s.profiles.user,5000),characters:short(s.profiles.characters,9000),world:short(s.profiles.world,6500),selectedCharacters:profileSelection().characters.slice(0,30),selectedUser:profileSelection().user})}\n[최근 RP 대화 (개인정보 및 비공개 사실은 주민에게 직접 노출 금지)] ${JSON.stringify(recent).slice(0,20000)}\n[기존 주민] ${JSON.stringify(residents).slice(0,7500)}\n[최근 커뮤니티 게시글 · 이전 AI 창작물은 실제 RP 사건의 증거가 아님] ${JSON.stringify(older).slice(0,14000)}\n[사용자 반응 대상] ${JSON.stringify(post||{}).slice(0,5000)}\n[최종 사실 검증] 위 RP 사실 및 정보 접근 제한을 제목·본문·댓글·대댓글 전부에 다시 적용하고, 확인되지 않은 유저·캐릭터의 행동·속마음·소문은 제거하라. JSON 객체만 답하라.`;
   }
   function parseGemini(result){let text=safeArray(result.candidates?.[0]?.content?.parts).map(p=>p.text||'').join('').trim();text=text.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');try{return JSON.parse(text);}catch{const m=/\{[\s\S]*\}/.exec(text);if(m)return JSON.parse(m[0]);throw new Error('Gemini JSON 형식 오류');}}
   // Blind company/alias decisions belong to Gemini, not local regexes or name lists.
@@ -1273,8 +1273,11 @@
     const kind=item?.source==='user'?'zab-author-me-name':label?'zab-author-character-name':'';
     return '<span class="'+kind+'">'+esc(item?.nick||'익명')+'</span>'+label;
   }
+  function communityPopularity(value){
+    return value==='low'||value==='high'?value:'normal';
+  }
   function normalizeComment(raw){const rpTime=currentRpStamp();const c={id:uid(),nicknameGuideKey:nicknameGuideKey(),characterProfileId:characterAuthorKey(raw),textKo:translationOn()?short(raw.textKo||'',3500):'',nick:communityNick(raw.nick,raw.residentId,raw.company,characterAuthorKey(raw)),residentId:short(raw.residentId||'',75),text:short(raw.text,3500),likes:num(raw.likes,0,999999,0),time:now(),rpTime,source:'ai',replies:[]};c.replies=safeArray(raw.replies).slice(0,12).map(r=>({id:uid(),nicknameGuideKey:nicknameGuideKey(),characterProfileId:characterAuthorKey(r),textKo:translationOn()?short(r.textKo||'',3000):'',nick:communityNick(r.nick,r.residentId,r.company),residentId:short(r.residentId||'',75),text:short(r.text,3000),likes:num(r.likes,0,999999,0),time:now(),rpTime,source:'ai',parentId:c.id})).filter(x=>x.text);return c;}
-  function applyResult(out,kind,replaceBatch){if(!out||typeof out!=='object')throw new Error('Gemini 생성 결과가 올바르지 않아요.');const board=currentBoard();if(replaceBatch)rollback(replaceBatch);const batch={id:uid(),created:[],comments:[],metrics:{},temporary:kind==='auto',time:now()};const posts=kind==='react'?[]:safeArray(out.posts).slice(0,num(data.settings.posts,1,15,3));for(const raw of posts){if(!String(raw.title||'').trim()&&!String(raw.body||'').trim())continue;const p={id:uid(),nicknameGuideKey:nicknameGuideKey(),characterProfileId:characterAuthorKey(raw),titleKo:translationOn()?short(raw.titleKo||'',180):'',bodyKo:translationOn()?short(raw.bodyKo||'',8500):'',title:short(raw.title||'무제',180),body:short(raw.body,8500),nick:communityNick(raw.nick,raw.residentId,raw.company,characterAuthorKey(raw)),residentId:short(raw.residentId||'',75),views:num(raw.views,0,10000000,10),likes:num(raw.likes,0,10000000,0),time:now(),rpTime:currentRpStamp(),source:'ai',comments:safeArray(raw.comments).slice(0,num(data.settings.newComments,0,30,7)).map(normalizeComment).filter(c=>c.text)};board.posts.push(p);batch.created.push(p.id);}
+  function applyResult(out,kind,replaceBatch){if(!out||typeof out!=='object')throw new Error('Gemini 생성 결과가 올바르지 않아요.');const board=currentBoard();if(replaceBatch)rollback(replaceBatch);const batch={id:uid(),created:[],comments:[],metrics:{},temporary:kind==='auto',time:now()};const posts=kind==='react'?[]:safeArray(out.posts).slice(0,num(data.settings.posts,1,15,3));for(const raw of posts){if(!String(raw.title||'').trim()&&!String(raw.body||'').trim())continue;const p={id:uid(),nicknameGuideKey:nicknameGuideKey(),characterProfileId:characterAuthorKey(raw),titleKo:translationOn()?short(raw.titleKo||'',180):'',bodyKo:translationOn()?short(raw.bodyKo||'',8500):'',title:short(raw.title||'무제',180),body:short(raw.body,8500),nick:communityNick(raw.nick,raw.residentId,raw.company,characterAuthorKey(raw)),residentId:short(raw.residentId||'',75),views:num(raw.views,0,10000000,10),likes:num(raw.likes,0,10000000,0),popularity:communityPopularity(raw.popularity),time:now(),rpTime:currentRpStamp(),source:'ai',comments:safeArray(raw.comments).slice(0,num(data.settings.newComments,0,30,7)).map(normalizeComment).filter(c=>c.text)};board.posts.push(p);batch.created.push(p.id);}
     let count=0;const eligible=new Set(board.posts.slice(-num(data.settings.oldPostWindow,0,300,20)-posts.length).filter(p=>!batch.created.includes(p.id)).map(p=>p.id));if(kind==='react'&&replaceBatch?.targetPost)eligible.add(replaceBatch.targetPost);
     for(const update of safeArray(out.updates)){const p=board.posts.find(p=>p.id===update.postId);if(!p||(!eligible.has(p.id)&&!(kind==='react'&&p.id===reactionTarget)))continue;for(const raw of safeArray(update.comments)){const c=normalizeComment(raw);const added=1+c.replies.length;if(count+added>num(data.settings.oldComments,0,100,10))break;if(!c.text)continue;p.comments.push(c);batch.comments.push(c.id,...c.replies.map(r=>r.id));count+=added;}}
     // Attach AI responses to existing user comments, never to the post root.
@@ -1292,20 +1295,31 @@
     }
     syncRecurringResidents(board);
     board.unread+=batch.created.length;
-    // Engagement is supplied by Gemini. No script-side random views/likes.
-    for(const update of safeArray(out.metricUpdates)){
-      const post=board.posts.find(p=>p.id===String(update?.postId||''));
-      if(!post||batch.created.includes(post.id))continue;
-      if(!Object.prototype.hasOwnProperty.call(batch.metrics,post.id))
-        batch.metrics[post.id]={views:post.views,likes:post.likes,comments:{}};
-      const previous=batch.metrics[post.id];
-      if(Number.isFinite(Number(update.views)))post.views=num(update.views,0,10000000,post.views);
-      if(Number.isFinite(Number(update.likes)))post.likes=num(update.likes,0,10000000,post.likes);
-      for(const metric of safeArray(update.commentLikes)){
-        const comment=post.comments.find(c=>c.id===String(metric?.commentId||''));
-        if(!comment||!Number.isFinite(Number(metric.likes)))continue;
-        if(!Object.prototype.hasOwnProperty.call(previous.comments,comment.id))previous.comments[comment.id]=comment.likes;
-        comment.likes=num(metric.likes,0,999999,comment.likes);
+    // Gemini decides popularity; JavaScript simulates modest engagement changes.
+    const popularityUpdates=new Map();
+    for(const change of safeArray(out.popularityUpdates)){
+      const id=String(change?.postId||'');
+      if(!id||!['low','normal','high'].includes(change?.popularity))continue;
+      popularityUpdates.set(id,change.popularity);
+    }
+    for(const post of board.posts){
+      if(batch.created.includes(post.id))continue;
+      const previousPopularity=post.popularity;
+      const tier=popularityUpdates.get(post.id)||communityPopularity(post.popularity);
+      const ageDays=Math.max(0,(now()-num(post.time,0,now(),now()))/86400000);
+      const decay=Math.max(0.05,1/(1+ageDays/2));
+      const intensity={low:0.35,normal:1,high:2.5}[tier];
+      // Only snapshot records that actually change. Rollback preserves pre-generation state.
+      batch.metrics[post.id]={views:post.views,likes:post.likes,comments:{},popularity:previousPopularity};
+      post.popularity=tier;
+      post.views=Math.min(10000000,post.views+Math.max(1,Math.floor((4+Math.random()*26)*decay*intensity)));
+      post.likes=Math.min(10000000,post.likes+Math.floor(Math.random()*4*decay*intensity));
+      for(const comment of post.comments){
+        if(comment.source!=='ai')continue;
+        if(Math.random()<Math.min(0.9,0.45*decay*intensity)){
+          batch.metrics[post.id].comments[comment.id]=comment.likes;
+          comment.likes=Math.min(999999,comment.likes+1);
+        }
       }
     }
     if(batch.created.length||batch.comments.length)board.lastBatch=batch;board.started=true;saved();return batch;
