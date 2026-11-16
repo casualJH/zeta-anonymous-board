@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.7.0
+// @version      0.7.1
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.7.0', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.7.1', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1732,6 +1732,10 @@
   #zab-panel .zab-comment.zab-post-author-reply,#zab-panel .zab-reply.zab-post-author-reply{background:color-mix(in srgb,var(--zab-accent) 9%,var(--zab-surface));border-radius:9px}
   #zab-panel .zab-comment.zab-post-author-reply{padding:12px 10px}
   #zab-panel .zab-reply.zab-post-author-reply{padding:9px 10px}
+  /* Extend only the original author's reply tint across the left guide and gap. */
+  #zab-panel .zab-replies>.zab-reply.zab-post-author-reply{position:relative;isolation:isolate;background:transparent}
+  #zab-panel .zab-replies>.zab-reply.zab-post-author-reply::before{content:"";position:absolute;z-index:-1;left:-23px;right:0;top:0;bottom:0;border-radius:9px;background:color-mix(in srgb,var(--zab-accent) 9%,var(--zab-surface));pointer-events:none}
+  #zab-panel[data-theme="dark"] .zab-replies>.zab-reply.zab-post-author-reply::before{background:color-mix(in srgb,var(--zab-accent) 17%,var(--zab-surface))}
   #zab-panel[data-theme="dark"] .zab-comment.zab-post-author-reply,#zab-panel[data-theme="dark"] .zab-reply.zab-post-author-reply{background:color-mix(in srgb,var(--zab-accent) 17%,var(--zab-surface))}
 
   /* v0.5.8: subtle resize grip (keep touch target), right-aligned comment actions */
