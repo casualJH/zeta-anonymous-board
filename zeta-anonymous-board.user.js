@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.8.1
+// @version      0.8.2
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.8.1', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.8.2', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1646,10 +1646,10 @@
   }
   function onOffSegment(name,label){
     const active=data?.settings?.[name]!==false;
-    return '<div class="zab-sort-switch zab-setting-onoff" role="group" aria-label="'+esc(label)+'">'+
+    return '<div class="zab-setting-toggle-row"><span class="zab-setting-toggle-label">'+esc(label)+'</span><div class="zab-sort-switch zab-setting-onoff" role="group" aria-label="'+esc(label)+'">'+
       [['on','ON'],['off','OFF']].map(([value,caption])=>
         '<button type="button" data-act="toggle-global:'+name+':'+value+'" class="'+((value==='on')===active?'is-active':'')+'" aria-pressed="'+((value==='on')===active?'true':'false')+'">'+caption+'</button>'
-      ).join('')+'</div>';
+      ).join('')+'</div></div>';
   }
   const tabs=[['basic','기본 설정'],['community','프로필/커뮤니티'],['people','주민·닉네임'],['api','API 설정'],['data','데이터 관리']];
   function mount(){if(panel||!document.body)return;const style=document.createElement('style');style.textContent=`
@@ -1784,6 +1784,12 @@
   #zab-panel .zab-list-heading .zab-sort-switch button:focus-visible{outline:2px solid var(--zab-accent);outline-offset:2px}
 
 
+
+  /* v0.8.2: label and ON/OFF control on the same line, even in a narrow popup. */
+  #zab-panel .zab-setting-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-width:0;margin:8px 0}
+  #zab-panel .zab-setting-toggle-label{font-size:12px;font-weight:600;line-height:1.4;min-width:0;flex:1 1 auto;overflow-wrap:keep-all}
+  #zab-panel .zab-setting-toggle-row .zab-setting-onoff{flex:0 0 auto;margin:0}
+  #zab-panel .zab-setting-toggle-row .zab-setting-onoff button{min-width:42px;padding:6px 8px}
 
   /* v0.8.1: compact segmented ON/OFF toggles matching list sort controls. */
   #zab-panel .zab-setting-onoff{display:inline-flex;gap:3px;margin:4px 0 9px;padding:3px;border-radius:10px;background:var(--zab-surface2)}
@@ -1948,7 +1954,7 @@
       <label>세계관 설정·배경</label>${ta('profiles.world',profiles.world||'',4)}
       <p class="zab-note">세계관 설명을 입력해도 필수 프로필 선택이 생략되지는 않아요.</p>`;
   }
-  function renderSettings(){const s=data.settings;return `${btn('settings-back','← 게시판으로')}<h3 style="margin:12px 0 8px">게시판 설정</h3><div class="zab-tabs">${tabs.map(([id,name])=>btn('tab:'+id,name,settingTab===id?'active':'')).join('')}</div><div class="zab-section zab-settings-section">${settingTab==='basic'?`<h4>테마</h4><label>화면 모드</label>${themeButtons()}<div class="zab-divider"></div><h4>기본 설정</h4><p class="zab-note">기본 설정은 모든 채팅방에서 공유됩니다. 실제 턴 카운트와 자동 생성 진행 상태는 채팅방별로 유지됩니다.</p><label>자동 갱신</label>${onOffSegment('auto','자동 갱신')}<label>자동 갱신 주기 (턴)</label>${inp('turns',s.turns,'number','min="1" max="999" step="1"')}<label>자동 생성 대기 시간 (초)</label>${inp('autoDelaySeconds',num(s.autoDelaySeconds,1,300,10),'number','min="1" max="300" step="1"')}<p class="zab-note">기본 대기 10초 · 설정 범위 1~300초 · 신규 턴 감지 후 대기</p><p class="zab-note">최초 수동 AI 생성 이후 자동 갱신됩니다. API 키와 유저·캐릭터 프로필 직접 선택이 필수예요.</p><p class="zab-note">${esc(profileSelectionStatus())}</p><div class="zab-divider"></div><h4>날짜·시간 설정</h4><label>게시글과 댓글에 표시할 시간 기준</label>${timeModeButtons()}<p class="zab-note">RP 시간은 가장 최근 턴의 코드블록/InfoBox 상태창에서 읽으며, 날짜 또는 시간만 있으면 확인된 항목만 표시합니다.</p><div class="zab-divider"></div><h4>AI 생성 설정</h4><label>새 게시글 수</label>${inp('posts',s.posts,'number','min="1" max="15"')}<label>새 게시글당 최대 댓글 수</label>${inp('newComments',s.newComments,'number','min="0" max="30"')}<label>기존 글 추가 댓글 전체 최대 개수</label>${inp('oldComments',s.oldComments,'number','min="0" max="100"')}<label>기존 댓글 추가 대상 최근 게시글 수</label>${inp('oldPostWindow',s.oldPostWindow,'number','min="0" max="300"')}<label>공개적으로 목격된 새 사건이 없을 때</label>${settingsSegment('quiet',[['daily','일상 게시글 생성'],['skip','게시글 생성 안 함'],['rumors','기존 소문 이어가기']],'공개적으로 목격된 새 사건이 없을 때')}<div class="zab-divider"></div><h4>게시판 표시 설정</h4><label>게시글 카드 참여 표시</label>${onOffSegment('showParticipationDot','게시글 카드 참여 표시')}<label>게시글 작성자 댓글 강조</label>${onOffSegment('highlightPostAuthor','게시글 작성자 댓글 강조')}`:
+  function renderSettings(){const s=data.settings;return `${btn('settings-back','← 게시판으로')}<h3 style="margin:12px 0 8px">게시판 설정</h3><div class="zab-tabs">${tabs.map(([id,name])=>btn('tab:'+id,name,settingTab===id?'active':'')).join('')}</div><div class="zab-section zab-settings-section">${settingTab==='basic'?`<h4>테마</h4><label>화면 모드</label>${themeButtons()}<div class="zab-divider"></div><h4>기본 설정</h4><p class="zab-note">기본 설정은 모든 채팅방에서 공유됩니다. 실제 턴 카운트와 자동 생성 진행 상태는 채팅방별로 유지됩니다.</p>${onOffSegment('auto','자동 갱신')}<label>자동 갱신 주기 (턴)</label>${inp('turns',s.turns,'number','min="1" max="999" step="1"')}<label>자동 생성 대기 시간 (초)</label>${inp('autoDelaySeconds',num(s.autoDelaySeconds,1,300,10),'number','min="1" max="300" step="1"')}<p class="zab-note">기본 대기 10초 · 설정 범위 1~300초 · 신규 턴 감지 후 대기</p><div class="zab-divider"></div><h4>날짜·시간 설정</h4><label>게시글과 댓글에 표시할 시간 기준</label>${timeModeButtons()}<p class="zab-note">RP 시간은 가장 최근 턴의 코드블록/InfoBox 상태창에서 읽으며, 날짜 또는 시간만 있으면 확인된 항목만 표시합니다.</p><div class="zab-divider"></div><h4>AI 생성 설정</h4><label>새 게시글 수</label>${inp('posts',s.posts,'number','min="1" max="15"')}<label>새 게시글당 최대 댓글 수</label>${inp('newComments',s.newComments,'number','min="0" max="30"')}<label>기존 글 추가 댓글 전체 최대 개수</label>${inp('oldComments',s.oldComments,'number','min="0" max="100"')}<label>기존 댓글 추가 대상 최근 게시글 수</label>${inp('oldPostWindow',s.oldPostWindow,'number','min="0" max="300"')}<label>공개적으로 목격된 새 사건이 없을 때</label>${settingsSegment('quiet',[['daily','일상 게시글 생성'],['skip','게시글 생성 안 함'],['rumors','기존 소문 이어가기']],'공개적으로 목격된 새 사건이 없을 때')}<div class="zab-divider"></div><h4>게시판 표시 설정</h4>${onOffSegment('showParticipationDot','게시글 카드 참여 표시')}${onOffSegment('highlightPostAuthor','게시글 작성자 댓글 강조')}`:
   settingTab==='community'?`<h4>프로필/커뮤니티</h4>
   <div class="zab-flex"><strong>① 프로필 불러오기</strong>${btn('toggle-profile-section',profileSectionOpen?'접기':'펼치기')}</div>
   ${profileSectionOpen?renderProfilePanel():`<p class="zab-note">${esc(profileSelectionStatus())}</p>`}
