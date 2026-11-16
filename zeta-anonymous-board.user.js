@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.10.4
+// @version      0.10.5
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.10.4', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.10.5', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1130,7 +1130,7 @@
       gallery:'Create a natural Korean DC Inside-style gallery TOPIC inclusive of both the user and all selected characters, preserving Korean gallery naming style. Prefer a confirmed common parent affiliation, then genuinely shared interests, activities or living environment, then a broad established world topic. Do not use only the user\'s occupation (e.g. veterinarian) or only some characters\' species as the whole gallery topic when other participants are excluded. Do not invent a shared relationship such as the veterinarian treating those characters. Prefer a broad world topic over an invented connection. Return ONLY the topic without " 갤러리"; e.g. 해외 축구, 대학생.',
       neighborhood:'Invent a natural Korean neighborhood-based NAVER CAFE name for a shared space of the user and all selected characters, not just a place name. Prefer a confirmed common location or living environment; otherwise choose an inclusive broad local-life theme rather than inventing a shared address or focusing on one participant\'s occupation, nationality, species or hobby. Freely choose the cafe name; "천호동 · 동네 이야기" is just one possible format, not a location to assume. Do not claim an unconfirmed real neighborhood exists. The name must sound like a local residents cafe (neighborhood, neighbors, residents, village, apartment, local moms, local chat or community).',
       reddit:'Create a natural English subreddit TOPIC/name that inclusively represents the USER and ALL SELECTED CHARACTERS, based ONLY on the supplied saved profiles, world setting and instructions. Choose the theme in this strict priority: (1) a confirmed COMMON PARENT AFFILIATION such as the same university, employer, school or organization, even when individual departments, majors, professions or nationalities differ; (2) if no common parent affiliation exists, a genuinely shared interest, professional field or activity (e.g. a Korean entertainer and a Russian actor may share the entertainment industry without implying they know or work with each other); (3) if neither exists, a broad topic representing the overall established world setting. Prefer the most inclusive confirmed commonality, not a detail unique to the user or one character. Never make up a shared affiliation, relationship or activity to manufacture a theme. A shared university UCM with a media major and a sports major should yield a university-wide concept such as UCMStudents, NOT UCMMedia. Express the concept as a concise natural English subreddit name. Return ONLY 3-21 ASCII letters, digits or underscores; the script adds r/. Never use character or user real names.',
-      office:'This is a shared anonymous board for the USER AND ALL SELECTED CHARACTERS. Use EXACTLY this decision tree. STEP 1: Find an explicitly confirmed COMMON organization, including an explicitly confirmed shared parent organization even if their teams/subunits differ. It can be a company, private special operations team, military unit, fire station, hospital, public agency, etc. If confirmed for ALL participants, output ONLY that exact organization name, without any suffix (e.g. 블랙팀). Do not choose a subunit shared by only some participants or invent an organizational hierarchy. STEP 2: If NO confirmed common organization exists, infer the common occupation or professional sector of ALL participants using BOTH explicitly stated jobs AND the clearly established meaning of their organizational affiliations. Examples: 소속: 제1부대 and 소속: 제2중대 may support the military field even when the word 군인 does not occur; different fire stations may support the firefighter field. A department or unit label alone does NOT prove that two differently named units belong to one common organization. Do NOT invent a more specific job, rank or license based merely on affiliation. Only when a genuinely common professional field is supported for ALL participants, output ONLY the common Korean profession or professional-sector name without any suffix (e.g. 군인 or 소방관). STEP 3: If neither a common organization nor a supported common professional field exists for all participants, output EXACTLY "익명 게시판", not 일터 익명 게시판 or a user-specific topic. Never fabricate a common employer, unit, job, profession, relationship or activity. Do NOT append 익명 게시판 to an organization or profession name; use that exact phrase ONLY in STEP 3. Do not include names of users or characters.',
+      office:'This is a shared anonymous board for the USER AND ALL SELECTED CHARACTERS. Use EXACTLY this decision tree. STEP 1: Find an explicitly confirmed COMMON organization, including an explicitly confirmed shared parent organization even if their teams/subunits differ. It can be a company, private special operations team, military unit, fire station, hospital, public agency, etc. If confirmed for ALL participants, output ONLY that exact organization name, without any suffix (e.g. 블랙팀). Do not choose a subunit shared by only some participants or invent an organizational hierarchy. STEP 2: If NO confirmed common organization exists, infer the common occupation or professional sector of ALL participants using BOTH explicitly stated jobs AND the clearly established meaning of their organizational affiliations. Examples: 소속: 제1대대 and 소속: 제2대대 may support the military field even when the word 군인 does not occur; different fire stations may support the firefighter field. A department or unit label alone does NOT prove that two differently named units belong to one common organization. Do NOT invent a more specific job, rank or license based merely on affiliation. Only when a genuinely common professional field is supported for ALL participants, output ONLY the common Korean profession or professional-sector name without any suffix (e.g. 군인 or 소방관). STEP 3: If neither a common organization nor a supported common professional field exists for all participants, output EXACTLY "익명 게시판", not 일터 익명 게시판 or a user-specific topic. Never fabricate a common employer, unit, job, profession, relationship or activity. Do NOT append 익명 게시판 to an organization or profession name; use that exact phrase ONLY in STEP 3. Do not include names of users or characters.',
       blind:'Return empty boardTitle. This community always uses the fixed title "토픽·블라블라".',
       x:'Return empty boardTitle. This community always uses the fixed title "타임라인".'
     };
@@ -1141,7 +1141,7 @@
       'COMMON COMMUNITY OWNERSHIP PRINCIPLE: These communities are spaces shared by the USER AND ALL SELECTED CHARACTERS, not a personal community of any one participant. For freely generated community names/topics, prioritize (1) a confirmed common parent affiliation such as school, employer or organization; (2) genuinely shared interests, activities, occupational field or living environment; (3) a broad theme of the established world when neither commonality exists. Different majors, occupations, nationalities or species can still share a broader confirmed theme. Do not choose a topic belonging only to the user or only some characters, force an unconfirmed connection, or invent common affiliations, relationships or activities. Keep every platform\'s native naming style and mandatory constraints.',
       'MANDATORY PLATFORM EXCEPTIONS: Everytime must use an explicitly confirmed university name only or return empty. Office follows precisely: common confirmed organization name ONLY; otherwise a genuinely shared inferred professional field ONLY; otherwise exactly 익명 게시판. Never invent a shared employer or unit. Blind and X keep their fixed titles.',
       'Platform-specific mandatory rule: '+(formats[com.id]||'Create a natural board name suited to this custom community description.'),
-      'Return exactly one JSON object {"boardTitle":"..."} and nothing else.'
+      com.id==='office'?'Return one JSON object {"boardTitle":"...","boardKind":"organization|profession|generic","nicknameBasis":"소속|부서|직무"} ONLY. boardKind is organization for a confirmed common organization, profession for a shared occupational field, generic for exactly 익명 게시판. If profession, the nickname prefix is ALWAYS the board professional field. For organization or generic, pick exactly ONE shared nickname basis from 소속, 부서 or 직무 that best fits available user and selected-character profiles. This basis is permanently used throughout this community, NOT decided separately per post or resident. Never invent profile facts for the user or selected characters.':'Return exactly one JSON object {"boardTitle":"..."} and nothing else.'
     ].join('\n');
     return rules+'\n[커뮤니티 유형] '+JSON.stringify({id:com.id,name:com.name,description:com.desc,style:com.style,example:com.styleExample||''})+
       '\n[유저 프로필] '+JSON.stringify({text:short(cfg.profiles.user,5000),selected:profiles.user})+
@@ -1149,6 +1149,25 @@
       '\n[세계관] '+JSON.stringify(short(cfg.profiles.world,6500))+
       '\n[지침] '+JSON.stringify({general:short(cfg.guide,5000),community:short(cfg.communityGuides?.[com.id]||'',5000),gallery:com.id==='gallery'?short(cfg.galleryDescription,2000):'',custom:com.id.startsWith('custom-')?short(com.styleExample,2000):''})+
       '\nOnly the four categories of source information above may determine the name. Return JSON only.';
+  }
+  // Persist one Gemini-chosen nickname category per room/community.
+  function officeNicknamePolicy(){
+    if(currentCommunity().id!=='office')return null;
+    const p=currentBoard().officeNicknamePolicy;
+    return p&&['organization','profession','generic'].includes(p.kind)&&['소속','부서','직무'].includes(p.basis)
+      ?{kind:p.kind,basis:p.basis,title:communityBoardTitle()}:null;
+  }
+  function officeNicknameInstruction(){
+    const p=officeNicknamePolicy();
+    if(!p)return '[사내 익명 게시판] 모든 작성자는 소속/부서/직무 중 한 가지 통일된 기준에 따른 앞부분 · 개성 있는 별명 형식을 사용한다. 직업군 게시판이라면 전원 공통 직업군 · 별명이다. Gemini는 일반 AI 주민의 소속·부서·직무를 세계관에 맞게 창작할 수 있지만 유저·RP 캐릭터에게는 프로필에서 확인되지 않은 사실을 만들지 않는다. 소속미상, 부서미상, 일반인, 익명직장인, 별명 단독 표시를 사용하지 마라.';
+    if(p.kind==='profession')return '[사내 익명 게시판 · 저장된 닉네임 통일 규칙 / 최우선] 커뮤니티 유형=직업군, 공통 직업군='+JSON.stringify(p.title)+'. 유저·선택 캐릭터·일반 AI 주민의 게시글/댓글/대댓글 작성자 닉네임은 모두 정확히 '+p.title+' · [Gemini가 만든 개성 있는 별명] 형식이다. 이 커뮤니티 안에서 어떤 주민도 닉네임 앞부분을 다른 조직명, 부서명, 직위명으로 바꾸지 마라. 동일 residentId의 별명은 유지하라. 별명 단독, 소속미상, 부서미상, 일반인 금지.';
+    return '[사내 익명 게시판 · 저장된 닉네임 통일 규칙 / 최우선] 커뮤니티 유형='+p.kind+', 게시판명='+JSON.stringify(p.title)+', 통일 기준='+p.basis+'. 모든 작성자의 게시글/댓글/대댓글 닉네임은 반드시 ['+p.basis+' 이름] · [Gemini가 만든 개성 있는 별명] 형식이다. 한 커뮤니티에서 소속·부서·직무 기준을 섞어 쓰지 마라. 유저·선택 캐릭터의 '+p.basis+' 정보는 실제 프로필에 확인되거나 명백하게 유추 가능한 사실만 사용하고 없는 정보를 창작하지 마라. 일반 AI 주민의 '+p.basis+' 정보는 Gemini가 세계관에 맞게 창작한다. 같은 residentId는 전체 닉네임을 유지하라. 소속미상, 부서미상, 일반인, 익명직장인, 별명 단독 표시 금지.';
+  }
+  function officeUnifiedNickname(nick){
+    const p=officeNicknamePolicy();const raw=short(nick,60);
+    if(!p||p.kind!=='profession'||!raw)return raw;
+    const alias=raw.split(/\s*·\s*/).slice(-1)[0].trim();
+    return alias?short(p.title+' · '+alias,60):raw;
   }
   function validatedBoardTitle(value,communityId){
     let title=short(value,100).replace(/[\r\n\t]/g,' ').trim();
@@ -1209,12 +1228,12 @@
   function promptPayload(kind,post){const b=currentBoard(),s=data.settings,community=currentCommunity(),recent=observedTurns.slice(-Math.max(10,num(s.turns,1,999,1)+5)).map((t,i)=>({turn:i+1,content:t.parts.map(p=>`${p.speaker} (${p.role}): ${short(p.text,1300)}`).join('\n').slice(0,4500)}));const older=b.posts.slice(-num(s.oldPostWindow,0,300,20)).map(p=>({id:p.id,title:p.title,body:short(p.body,850),comments:p.comments.slice(-12).map(c=>({id:c.id,author:community.id==='gallery'?galleryDisplayNick(c):c.nick,source:c.source||'ai',text:short(c.text,450),replies:safeArray(c.replies).slice(-5).map(r=>({id:r.id,author:community.id==='gallery'?galleryDisplayNick(r):r.nick,source:r.source||'ai',text:short(r.text,220)}))}))}));const residents=Object.values(b.residents).slice(-40);
     const communityRules=community.id==='gallery'?'갤러리에서는 세계관에 맞는 주제와 관심사를 다루고, 짧은 반말과 한국 인터넷 갤러리식 표현을 상황에 맞게 자연스럽게 사용하라. Gemini가 일회성 AI 주민의 유동닉 ㅇㅇ(가상 IP)와 반복 등장하는 고정 주민·RP 캐릭터의 창의적인 익명 고정닉을 모두 직접 생성하라. 반고닉은 사용하지 않는다. 가상 IP는 실제 IP를 수집하거나 추측하지 말고 창작하라. 유저는 기본 유동닉이며 직접 닉네임을 지정하면 고정닉이다. 실제 IP를 수집하거나 추측하지 마라.':community.id==='blind'?
       '블라인드는 여러 회사의 직원이 참여하는 외부 직장인 커뮤니티다. 현재 RP 회사의 사내 게시판이 아니다. 서로 다른 업종·회사에 다니는 글쓴이들을 혼합하고 새 글의 과반수는 현재 RP 중심 회사와 무관한 다른 회사의 직장 생활·업계 이야기를 다뤄라. 필요한 경우 가상의 회사명을 자연스럽게 창작해도 되나, 개인에 대한 사실로 단정하지 마라. 게시글/댓글 작성자의 회사명과 별명은 Gemini가 직접 결정하라. 일반 AI 주민의 회사는 세계관에 맞게 창작할 수 있지만 유저·RP 캐릭터의 회사는 명시적으로 확인된 소속만 사용하라. 확인되지 않은 소속은 창작하지 말고 company는 빈 문자열로 두며 닉네임의 회사 자리는 소속미확인으로 표시하라. 닉네임은 회사명 · 개성 있는 익명 별명 형태로 작성하라(예: 대한그룹 · 퇴사각재는중, 한빛전자 · 칼퇴하고싶다). 회사명 자리에 부서명·직급·팀명을 절대 넣지 말고, 실명·프로필 이름·익명직장인 같은 고정 이름을 사용하지 마라. 같은 주민 residentId는 회사와 닉네임을 유지하고, 다른 주민은 회사·별명을 다양하게 만들어라. 게시글과 댓글 JSON에 company 필드를 회사명으로 함께 제공하라. 특정 회사 내부에서만 알 수 있는 정보는 외부인이 본 것처럼 단정하지 마라.':community.id==='office'?
-      '사내 익명 게시판은 회사뿐 아니라 군부대·소방서·경찰서·병원·공공기관 등 조직 내부 또는 공통 직업 분야의 익명 게시판이다. 유저와 선택된 캐릭터 전원이 함께 이용할 수 있는 범위를 지켜라. 모두가 같은 조직에 속한다는 사실이 확인되면 그 조직 구성원의 내부 일상과 공개 가능한 업무 이야기를 다룬다. 같은 조직이 확인되지 않고 공통 직업 분야만 확인되면 서로 다른 소속일 수 있는 해당 직업군의 경험과 의견을 다루며 같은 부대·소방서·회사에서 일한다고 가정하지 마라. 공통 직업 분야도 없으면 특정 직업에 편중되지 않는 익명 게시판으로 운영하라. 직업명이 직접 없더라도 부대·중대·대대 같은 소속 단서로 공통 군 직업군을 합리적으로 유추할 수 있지만, 서로 다른 소속을 같은 조직으로 간주하거나 직급·세부 직업을 단정하지 마라. 게시글·댓글·대댓글의 nick은 확인된 부서/팀/부대/직무 등 소속 또는 역할 · 개성 있는 익명 별명 형태로 작성하라(예: 구매팀 · 퇴근요정, 구조대 · 커피수혈중, 소방관 · 야간근무중). 실제 프로필에서 확인되지 않은 특정 부서·부대·계급·근무지를 지어내지 마라. 구체적 소속이나 역할을 모르면 소속미상 · 별명으로 표시하라. 유저·RP 캐릭터의 회사명·조직명·직책·직무는 실제 확인된 정보만 사용하라. 캐릭터 실명은 닉네임에 사용하지 말고 같은 residentId의 닉네임을 유지하라. 외부 여러 회사의 직원이 이용하는 블라인드와 동일하게 다루지 마라.':
+      '사내 익명 게시판은 회사뿐 아니라 군부대·소방서·경찰서·병원·공공기관 등 조직 내부 또는 공통 직업 분야의 익명 게시판이다. 유저와 선택된 캐릭터 전원이 함께 이용할 수 있는 범위를 지켜라. 모두가 같은 조직에 속한다는 사실이 확인되면 그 조직 구성원의 내부 일상과 공개 가능한 업무 이야기를 다룬다. 같은 조직이 확인되지 않고 공통 직업 분야만 확인되면 서로 다른 소속일 수 있는 해당 직업군의 경험과 의견을 다루며 같은 부대·소방서·회사에서 일한다고 가정하지 마라. 공통 직업 분야도 없으면 특정 직업에 편중되지 않는 익명 게시판으로 운영하라. 직업명이 직접 없더라도 부대·중대·대대 같은 소속 단서로 공통 군 직업군을 합리적으로 유추할 수 있지만, 서로 다른 소속을 같은 조직으로 간주하거나 직급·세부 직업을 단정하지 마라. 게시글·댓글·대댓글의 nick은 확인된 부서/팀/부대/직무 등 소속 또는 역할 · 개성 있는 익명 별명 형태로 작성하라(예: 구매팀 · 퇴근요정, 구조대 · 커피수혈중, 소방관 · 야간근무중). 실제 프로필에서 확인되지 않은 특정 부서·부대·계급·근무지를 지어내지 마라. 일반 AI 주민에게는 Gemini가 세계관에 어울리는 소속·부서·직무를 창작할 수 있다. 유저·선택 캐릭터의 조직·직무 정보는 실제 프로필에 근거해야 한다. 소속미상, 부서미상, 일반인, 별명 단독 형식은 금지한다. 유저·RP 캐릭터의 회사명·조직명·직책·직무는 실제 확인된 정보만 사용하라. 캐릭터 실명은 닉네임에 사용하지 말고 같은 residentId의 닉네임을 유지하라. 외부 여러 회사의 직원이 이용하는 블라인드와 동일하게 다루지 마라.':
       '';
     const nicknameRules={
       gallery:'갤러리: Gemini가 일회성 AI 주민의 ㅇㅇ(창작 가상 IP) 유동닉과 반복 주민·RP 캐릭터의 고정닉을 직접 창작하라. 유저 닉네임도 별도 Gemini 생성 결과 또는 직접 설정값을 따른다. 반고닉 없음.',
       everytime:'에브리타임: 각 작성자를 익명1, 익명2, 익명3처럼 숫자형 익명 표기로 구분하라. 실명, 회사명, 직급, 다른 플랫폼 아이디를 사용하지 마라. 같은 residentId는 같은 익명 번호를 재사용한다.',
-      office:'사내 익명 게시판: Gemini가 확인된 소속/부서/부대/직무와 별명을 직접 결정하라. 게시글·댓글·대댓글 nick은 소속 또는 역할 · 별명 형식(예: 구매팀 · 퇴근요정, 소방관 · 야간근무중). 없는 조직·부대·계급·부서를 지어내지 말고 구체적 소속과 직무가 모두 확인되지 않으면 소속미상 · 별명으로 표시하라. 캐릭터 실명과 무관한 회사명은 사용하지 마라.',
+      office:'사내 익명 게시판: Gemini가 확인된 소속/부서/부대/직무와 별명을 직접 결정하라. 게시글·댓글·대댓글 nick은 소속 또는 역할 · 별명 형식(예: 구매팀 · 퇴근요정, 소방관 · 야간근무중). 유저·선택 캐릭터의 확인되지 않은 조직·부대·계급·부서는 창작하지 마라. 일반 AI 주민의 소속·부서·직무는 Gemini가 세계관에 맞게 창작한다. 소속미상, 부서미상, 일반인, 별명만 단독으로 쓰는 형식은 금지한다. 캐릭터 실명과 무관한 회사명은 사용하지 마라.',
       reddit:'Reddit: 영어를 사용하는 Reddit 특유의 자연스러운 게시글·댓글·대댓글을 작성하라. 모든 게시글·댓글 작성자는 u/로 시작하는 서로 다른 창의적인 영문 또는 영숫자 핸들을 사용한다. 익명직장인, 부서명 · 닉네임, 실명을 쓰지 마라.',
       x:'X: 모든 작성자는 @로 시작하는 짧고 개성 있는 영문·숫자·밑줄 핸들을 사용한다(예: @midnightcoffee, @afterwork_24). 실명, 회사명 · 별명, 익명직장인, @anonymous 같은 획일적 이름을 사용하지 마라.',
       neighborhood:'동네 게시판: 동네산책러, 골목길냥집사, 우리동네빵순이처럼 동네생활에 어울리는 서로 다른 자연스러운 별명을 사용하고 실명이나 회사명 형식을 쓰지 마라.'
@@ -1238,7 +1257,7 @@
     const translationRule=translationOn()?'[번역 ON] 영어 원문 등 해당 커뮤니티에 자연스러운 원문 언어로 먼저 작성하라. 원문 제목·본문·댓글·대댓글은 각각 title/body/text에 넣고, 같은 내용의 자연스럽고 충실한 한국어 번역을 titleKo/bodyKo/textKo에 함께 넣어라. Reddit에서는 영어 원문을 우선 생성하고 영어 인터넷 특유의 표현과 말투를 유지한다. 한국어 번역은 원문 의미를 누락하거나 창작하지 말고 대응시켜라. 모든 AI 신규/추가 댓글/대댓글에 번역 필드를 제공하라. 사용자 원문을 수정하거나 번역하여 다시 내보내지 마라.':'[번역 OFF] 원래 커뮤니티에 어울리는 언어와 말투로 작성하고 한국어 번역 필드는 생략하거나 빈 문자열로 둬라.';
     const userLanguageRule='[사용자 작성글 언어 해석 · 모든 커뮤니티 공통] 사용자가 직접 작성한 게시글·댓글·대댓글은 입력 언어와 관계없이 해당 커뮤니티의 기본 언어로 작성된 발언으로 간주하라. 주민과 RP 캐릭터는 해당 커뮤니티의 기본 언어로 된 발언을 읽은 것처럼 의미와 어조를 이해하고 자연스럽게 반응하라. 답변은 해당 커뮤니티의 언어와 말투를 따르라. 사용자 원문은 수정하지 않고 그대로 보존하라. 입력 언어가 다르다는 이유로 언어 차이를 지적하지 마라.';
     const task=kind==='react'?`아래 사용자 게시글/댓글을 대상으로 AI 주민의 반응만 생성. 새 게시글은 0개. 대상 글 ID=${post?.id||''}. 이전 글 중 해당 글에만 댓글 또는 기존 사용자 댓글에 대한 대댓글을 추가.`:`새 게시글 ${num(s.posts,1,15,3)}개를 목표로 생성하라. 새 게시글당 댓글 최대 ${num(s.newComments,0,30,7)}개. 기존 최근 ${num(s.oldPostWindow,0,300,20)}개 글 중 내용 관련성이 높은 글에만 추가 댓글을 작성하되, 모든 기존 글에 추가되는 댓글·대댓글 총합은 ${num(s.oldComments,0,100,10)}개 이하. 특히 관련성 있는 기존 사용자 댓글(source=user)을 확인해 해당 댓글 ID로 replies를 작성하라. ${s.quiet==='skip'?'공개 사건이 전혀 없다면 게시글과 댓글 생성 생략':s.quiet==='rumors'?'새 사건이 없으면 기존 소문만 이어가기':'새 사건이 없으면 세계관 주민 일상 글 작성'}.`;
-    return `${rpFactRules}\n${instructions}\n${userLanguageRule}\n[번역 출력 규칙] ${translationRule}\n${galleryTopic}\n[사용자 지정 커뮤니티 지침] ${customStyle}\n[커뮤니티별 작성 규칙] ${nicknameOverride&&community.id==='blind'?'블라인드는 여러 회사의 직장인이 참여하는 외부 커뮤니티다. 특정 회사 내부의 비공개 정보는 노출하지 마라. 닉네임은 사용자 추가 지침을 우선하라.':nicknameOverride&&community.id==='office'?'사내 익명 게시판은 확인된 공동 조직 또는 공통 직업 분야를 기준으로 참여하며, 소속 관계를 창작하지 않는다. 닉네임 형식은 사용자 추가 지침을 우선하라.':communityRules}\n[닉네임 필수 규칙] ${nicknameRule}\n${schema}\n[인기도 판단 · 혼합 시뮬레이션] Gemini는 새 게시글마다 popularity를 low(관심 낮음), normal(일반), high(화제) 중 하나로 판단하고 JSON posts[].popularity에 넣어라. 기존 게시글 중 인기 변화가 필요한 글은 popularityUpdates:[{postId,popularity}]로 반환하라. 기존 글을 재평가하지 않으면 저장된 인기도를 유지한다. 기존 글의 조회수·좋아요 숫자 자체는 반환하지 마라. 스크립트가 Gemini의 인기도 판정에 따라 경과 시간을 고려하여 조회수·좋아요를 증가시킨다. 사용자·RP 캐릭터의 실제 사건이나 행동을 인기 판정의 근거로 새로 창작하지 마라.\n[작업] ${task}\n[커뮤니티] ${JSON.stringify(community)}\n[커뮤니티별 생성 지침] ${short(s.communityGuides?.[community.id]||'',5000)}\n[수집된 프로필] ${JSON.stringify({user:short(s.profiles.user,5000),characters:short(s.profiles.characters,9000),world:short(s.profiles.world,6500),selectedCharacters:profileSelection().characters.slice(0,30),selectedUser:profileSelection().user})}\n[최근 RP 대화 (개인정보 및 비공개 사실은 주민에게 직접 노출 금지)] ${JSON.stringify(recent).slice(0,20000)}\n[기존 주민] ${JSON.stringify(residents).slice(0,7500)}\n[최근 커뮤니티 게시글 · 이전 AI 창작물은 실제 RP 사건의 증거가 아님] ${JSON.stringify(older).slice(0,14000)}\n[사용자 반응 대상] ${JSON.stringify(post||{}).slice(0,5000)}\n[최종 사실 검증] 위 RP 사실 및 정보 접근 제한을 제목·본문·댓글·대댓글 전부에 다시 적용하고, 확인되지 않은 유저·캐릭터의 행동·속마음·소문은 제거하라. JSON 객체만 답하라.`;
+    return `${rpFactRules}\n${instructions}\n${userLanguageRule}\n[번역 출력 규칙] ${translationRule}\n${galleryTopic}\n[사용자 지정 커뮤니티 지침] ${customStyle}\n[커뮤니티별 작성 규칙] ${nicknameOverride&&community.id==='blind'?'블라인드는 여러 회사의 직장인이 참여하는 외부 커뮤니티다. 특정 회사 내부의 비공개 정보는 노출하지 마라. 닉네임은 사용자 추가 지침을 우선하라.':nicknameOverride&&community.id==='office'?'사내 익명 게시판은 확인된 공동 조직 또는 공통 직업 분야를 기준으로 참여하며, 소속 관계를 창작하지 않는다. 닉네임 형식은 사용자 추가 지침을 우선하라.':communityRules}\n[닉네임 필수 규칙] ${nicknameRule}\n${community.id==='office'?officeNicknameInstruction():''}\n${schema}\n[인기도 판단 · 혼합 시뮬레이션] Gemini는 새 게시글마다 popularity를 low(관심 낮음), normal(일반), high(화제) 중 하나로 판단하고 JSON posts[].popularity에 넣어라. 기존 게시글 중 인기 변화가 필요한 글은 popularityUpdates:[{postId,popularity}]로 반환하라. 기존 글을 재평가하지 않으면 저장된 인기도를 유지한다. 기존 글의 조회수·좋아요 숫자 자체는 반환하지 마라. 스크립트가 Gemini의 인기도 판정에 따라 경과 시간을 고려하여 조회수·좋아요를 증가시킨다. 사용자·RP 캐릭터의 실제 사건이나 행동을 인기 판정의 근거로 새로 창작하지 마라.\n[작업] ${task}\n[커뮤니티] ${JSON.stringify(community)}\n[커뮤니티별 생성 지침] ${short(s.communityGuides?.[community.id]||'',5000)}\n[수집된 프로필] ${JSON.stringify({user:short(s.profiles.user,5000),characters:short(s.profiles.characters,9000),world:short(s.profiles.world,6500),selectedCharacters:profileSelection().characters.slice(0,30),selectedUser:profileSelection().user})}\n[최근 RP 대화 (개인정보 및 비공개 사실은 주민에게 직접 노출 금지)] ${JSON.stringify(recent).slice(0,20000)}\n[기존 주민] ${JSON.stringify(residents).slice(0,7500)}\n[최근 커뮤니티 게시글 · 이전 AI 창작물은 실제 RP 사건의 증거가 아님] ${JSON.stringify(older).slice(0,14000)}\n[사용자 반응 대상] ${JSON.stringify(post||{}).slice(0,5000)}\n[최종 사실 검증] 위 RP 사실 및 정보 접근 제한을 제목·본문·댓글·대댓글 전부에 다시 적용하고, 확인되지 않은 유저·캐릭터의 행동·속마음·소문은 제거하라. JSON 객체만 답하라.`;
   }
   function parseGemini(result){let text=safeArray(result.candidates?.[0]?.content?.parts).map(p=>p.text||'').join('').trim();text=text.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');try{return JSON.parse(text);}catch{const m=/\{[\s\S]*\}/.exec(text);if(m)return JSON.parse(m[0]);throw new Error('Gemini JSON 형식 오류');}}
   // Blind company/alias decisions belong to Gemini, not local regexes or name lists.
@@ -1249,7 +1268,8 @@
       'Generate exactly one anonymous USER nickname for the specified community. The Gemini model decides the entire creative name, company, department, gallery fictional IP, u/ handle or @ handle, not JavaScript.',
       'Use ONLY saved user profile, character profiles, world and instructions. Never use RP chat, historical posts or unseen events.',
       'Respect the requested platform identity: Blind = confirmed user employer + · + creative anonymous alias; office = confirmed user department, unit or profession + · + anonymous alias; gallery = creative fictional ㅇㅇ(IP) anonymous name (never actual IP); Reddit = u/EnglishHandle; X = @EnglishHandle; neighborhood = original Korean local alias; custom = custom guidance.',
-      'For Blind and office do not invent a real affiliation for the user. For Blind, if employer is unknown use 소속미확인. For office, use a confirmed department, military unit, team or actual professional role; if none is confirmed use 소속미상. A professional role can label the office alias but must NEVER be misrepresented as an actual employer or unit.',
+      'For Blind and office never invent affiliations for the user. For Blind, if employer is unknown use 소속미확인. For office, obey the saved common nickname prefix basis, and use only user profile facts or justified occupational inference. Do not invent any user department, employer, job or military unit.',
+      community.id==='office'?officeNicknameInstruction():'',
       'Do not use the actual user or character names as nickname. No generic default nickname. Return JSON ONLY: {"nick":"complete creatively chosen anonymous nickname"}.',
       '[커뮤니티] '+JSON.stringify({id:community.id,name:community.name,style:community.style,description:community.desc}),
       '[유저 프로필] '+JSON.stringify({text:short(settings.profiles.user,5000),selected:selected.user}),
@@ -1286,7 +1306,7 @@
     // Preserve a recurring resident's existing Gemini name, but never invent a new one.
     const nick=short(existing||rawNick,60);
     if(nick&&isRpRealName(nick))return '닉네임 미지정';
-    return nick||'닉네임 미지정';
+    return officeUnifiedNickname(nick)||'닉네임 미지정';
   }
   // Mark RP characters only with a confirmed selected profile ID.
   function characterAuthorKey(raw){
@@ -1303,7 +1323,7 @@
   function authorName(item){
     const label=authorBadge(item);
     const kind=item?.source==='user'?'zab-author-me-name':label?'zab-author-character-name':'';
-    return '<span class="'+kind+'">'+esc(item?.nick||'익명')+'</span>'+label;
+    return '<span class="'+kind+'">'+esc(officeUnifiedNickname(item?.nick||'익명'))+'</span>'+label;
   }
   function communityPopularity(value){
     return value==='low'||value==='high'?value:'normal';
@@ -1393,28 +1413,37 @@
     }
     if(!board.started&&kind==='auto')return;clearTimeout(autoTimer);const batchToReplace=kind==='regenerate'?board.lastBatch:null;
     const request={id:uid(),kind,cancelled:false,room,community:data.settings.selected,epoch:runEpoch,request:null};const countedAtStart=turnCount;let succeeded=false;busy=request;reactionTarget=post?.id||'';renderStatus();try{const model=data.settings.model||models[0];
-      if(kind==='manual'&&!['blind','x'].includes(request.community)&&!manualBoardTitle(request.community)&&!validatedBoardTitle(board.generatedTitle,request.community)){
+      if(kind==='manual'&&!['blind','x'].includes(request.community)&&(!manualBoardTitle(request.community)&&!validatedBoardTitle(board.generatedTitle,request.community)||request.community==='office'&&!officeNicknamePolicy())){
         try{
           const namingBody={contents:[{role:'user',parts:[{text:boardTitlePrompt()}]}],generationConfig:{temperature:0.6,responseMimeType:'application/json',maxOutputTokens:256}};
           const naming=parseGemini(await generateWithFallback(key,model,namingBody,request));
           if(request.cancelled||busy!==request||request.room!==room||request.community!==data?.settings.selected||request.epoch!==runEpoch)return;
           const chosen=validatedBoardTitle(naming.boardTitle,request.community);
-          if(chosen&&!manualBoardTitle(request.community)&&!validatedBoardTitle(board.generatedTitle,request.community)){board.generatedTitle=chosen;saved();}
+          const existing=manualBoardTitle(request.community)||validatedBoardTitle(board.generatedTitle,request.community);
+          if(chosen&&!existing)board.generatedTitle=chosen;
+          if(request.community==='office'&&!officeNicknamePolicy()&&chosen){
+            const actual=existing||chosen;
+            const kind=actual==='익명 게시판'?'generic':(['organization','profession'].includes(naming.boardKind)?naming.boardKind:null);
+            const basis=kind==='profession'?'직무':['소속','부서','직무'].includes(naming.nicknameBasis)?naming.nicknameBasis:null;
+            if(kind&&basis)board.officeNicknamePolicy={kind,basis};
+          }
+          if(chosen)saved();
         }catch(err){if(request.cancelled)return;console.warn('[제타 익명 게시판] 게시판 이름 생성 실패:',err);}
       }
-      if(kind==='manual'&&request.community!=='everytime'&&!board.userNicknameReady){
+      if(kind==='manual'&&request.community!=='everytime'&&(!board.userNicknameReady||request.community==='office'&&officeNicknamePolicy()&&board.userNicknamePolicyKey!==JSON.stringify(board.officeNicknamePolicy))){
         try{
           const identityBody={contents:[{role:'user',parts:[{text:userIdentityPrompt()}]}],generationConfig:{temperature:0.6,responseMimeType:'application/json',maxOutputTokens:320}};
           const identity=parseGemini(await generateWithFallback(key,model,identityBody,request));
           if(request.cancelled||busy!==request||request.room!==room||request.community!==data?.settings.selected||request.epoch!==runEpoch)return;
           const nick=short(identity.nick,60);
           if(nick&&!isRpRealName(nick)){
-            board.userGeneratedNickname=nick;
+            board.userGeneratedNickname=request.community==='office'?officeUnifiedNickname(nick):nick;
             board.userNicknameReady=true;
+            if(request.community==='office')board.userNicknamePolicyKey=JSON.stringify(board.officeNicknamePolicy||null);
             if(request.community==='blind'){board.userBlindNickname=nick;board.userBlindIdentityReady=true;}
             for(const p of safeArray(board.posts)){
               const targets=[p,...safeArray(p.comments).flatMap(c=>[c,...safeArray(c.replies)])];
-              for(const item of targets)if(item.source==='user'&&(item.nick==='닉네임 생성 전'||item.nick==='소속미확인 · 익명'))item.nick=nick;
+              for(const item of targets)if(item.source==='user'&&request.community==='office'&&data.settings.userNickMode!=='custom'||item.source==='user'&&(item.nick==='닉네임 생성 전'||item.nick==='소속미확인 · 익명'))item.nick=board.userGeneratedNickname;
             }
             saved();
           }
@@ -1428,7 +1457,7 @@
     if(data.settings.userNickMode==='custom'&&custom)return short(custom,60);
     if(currentCommunity().id==='everytime')return '익명';
     const board=currentBoard();
-    if(board.userNicknameReady&&board.userGeneratedNickname)return board.userGeneratedNickname;
+    if(board.userNicknameReady&&board.userGeneratedNickname)return officeUnifiedNickname(board.userGeneratedNickname);
     if(currentCommunity().id==='blind'&&board.userBlindIdentityReady&&board.userBlindNickname)return board.userBlindNickname;
     return '닉네임 생성 전';
   }
