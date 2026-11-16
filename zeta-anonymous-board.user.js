@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.6.8
+// @version      0.6.9
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.6.8', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.6.9', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -35,7 +35,7 @@
   const presets=[
     {id:'everytime',name:'에브리타임',desc:'학생 커뮤니티, 익명번호, 학식·수업·연애·학교 소문, 가벼운 반말',nick:'익명1, 익명2, 글쓴이',style:'학생 익명 게시판 특유의 간결한 말투'},
     {id:'blind',name:'블라인드',desc:'회사원 커뮤니티, 직장·이직·연애·업계 소문',nick:'회사명 · 닉네임',style:'직장인의 솔직한 현실적 말투'},
-    {id:'office',name:'사내 익명 게시판',desc:'같은 회사 직원들이 일상과 소문을 나눔',nick:'익명직원, 개발팀 익명',style:'사내 익명 게시판 말투'},
+    {id:'office',name:'사내 익명 게시판',desc:'같은 회사 직원들이 일상과 소문을 나눔',nick:'팀/부서명 · 별명',style:'사내 익명 게시판 말투'},
     {id:'reddit',name:'Reddit',desc:'서브레딧식 토론, 농담과 반응',nick:'u/name',style:'Reddit 토론 문화에 맞는 말투를 한국어로 자연스럽게 표현'},
     {id:'x',name:'X',desc:'짧은 글, 실시간 화제와 반응',nick:'@handle',style:'짧고 속도감 있는 SNS 말투'},
     {id:'neighborhood',name:'동네 게시판',desc:'동네 생활, 목격담과 지역 정보',nick:'동네산책러, 이웃주민',style:'주민 카페 말투'},
@@ -391,7 +391,7 @@
         /(?:회사|직장|소속|근무지|재직|기업|회사명)\s*[:：-]?\s*([가-힣A-Za-z0-9]{2,22}(?:그룹|기업|전자|건설|금융|테크|산업|통신|상사|제약|은행|보험|모터스|솔루션|유통|물산|바이오|시스템즈|홀딩스))/,
         /([가-힣A-Za-z0-9]{2,22}(?:그룹|기업|전자|건설|금융|테크|산업|통신|상사|제약|은행|보험|모터스|솔루션|유통|물산|바이오|시스템즈|홀딩스))/
       ]);
-      return (company||'우리 회사')+' · 익명 게시판';
+      return company||'우리 회사';
     }
     if(id==='reddit'){
       // A single representative world-fitting display name; NOT a subreddit list.
@@ -1085,12 +1085,12 @@
   function promptPayload(kind,post){const b=currentBoard(),s=data.settings,community=currentCommunity(),recent=observedTurns.slice(-Math.max(10,num(s.turns,1,999,1)+5)).map((t,i)=>({turn:i+1,content:t.parts.map(p=>`${p.speaker} (${p.role}): ${short(p.text,1300)}`).join('\n').slice(0,4500)}));const older=b.posts.slice(-num(s.oldPostWindow,0,300,20)).map(p=>({id:p.id,title:p.title,body:short(p.body,850),comments:p.comments.slice(-12).map(c=>({id:c.id,author:community.id==='gallery'?galleryDisplayNick(c):c.nick,source:c.source||'ai',text:short(c.text,450),replies:safeArray(c.replies).slice(-5).map(r=>({id:r.id,author:community.id==='gallery'?galleryDisplayNick(r):r.nick,source:r.source||'ai',text:short(r.text,220)}))}))}));const residents=Object.values(b.residents).slice(-40);
     const communityRules=community.id==='gallery'?'갤러리에서는 세계관에 맞는 주제와 관심사를 다루고, 짧은 반말과 한국 인터넷 갤러리식 표현을 상황에 맞게 자연스럽게 사용하라. 일회성 AI 주민은 유동닉 ㅇㅇ(가상 IP), 서로 다른 게시글에 반복 등장하여 확정된 고정 주민과 RP 캐릭터는 고정닉을 사용한다. 반고닉은 사용하지 않는다. 유저는 기본 유동닉이며 직접 닉네임을 지정하면 고정닉이다. 실제 IP를 수집하거나 추측하지 마라.':community.id==='blind'?
       '블라인드는 여러 회사의 직원이 참여하는 외부 직장인 커뮤니티다. 현재 RP 회사의 사내 게시판이 아니다. 서로 다른 업종·회사에 다니는 글쓴이들을 혼합하고 새 글의 과반수는 현재 RP 중심 회사와 무관한 다른 회사의 직장 생활·업계 이야기를 다뤄라. 필요한 경우 가상의 회사명을 자연스럽게 창작해도 되나, 개인에 대한 사실로 단정하지 마라. 게시글/댓글 작성자 닉네임은 반드시 세계관에 맞는 회사명 · 개성 있는 익명 별명 형태로 작성하라(예: 대한그룹 · 퇴사각재는중, 한빛전자 · 칼퇴하고싶다). 회사명 자리에 부서명·직급·팀명을 절대 넣지 말고, 실명·프로필 이름·익명직장인 같은 고정 이름을 사용하지 마라. 같은 주민 residentId는 회사와 닉네임을 유지하고, 다른 주민은 회사·별명을 다양하게 만들어라. 게시글과 댓글 JSON에 company 필드를 회사명으로 함께 제공하라. 특정 회사 내부에서만 알 수 있는 정보는 외부인이 본 것처럼 단정하지 마라.':community.id==='office'?
-      '사내 익명 게시판은 현재 RP에서 다니는 회사 소속 구성원만 참여한다. 외부 회사 직원이 사내 직원으로 글을 쓰지 않도록 하고, 부서·팀 관점의 회사 내부 일상과 공개 가능한 직장 소문을 중심으로 작성하라. 외부 기업 직원의 일반 블라인드 게시글처럼 작성하지 마라.':
+      '사내 익명 게시판은 현재 RP에서 다니는 회사 소속 구성원만 참여한다. 외부 회사 직원이 사내 직원으로 글을 쓰지 않도록 하고, 부서·팀 관점의 회사 내부 일상과 공개 가능한 직장 소문을 중심으로 작성하라. 게시글·댓글·대댓글의 모든 작성자 nick은 반드시 팀/부서명 · 개성 있는 익명 별명 형태로 작성하라(예: 구매팀 · 퇴근요정, 인사팀 · 커피수혈중). 팀/부서명은 제공된 세계관·프로필에서 확인되는 실제 소속을 우선하고, 확인되지 않는 주민에게 임의의 특정 부서 소속을 사실처럼 부여하지 말고 부서미상으로 표시하라. 캐릭터 실명과 다른 회사 이름을 닉네임에 사용하지 말고 같은 residentId의 닉네임을 유지하라. 외부 기업 직원의 일반 블라인드 게시글처럼 작성하지 마라.':
       '';
     const nicknameRules={
       gallery:'갤러리: 일회성 AI 주민만 ㅇㅇ(가상 IP) 유동닉을 사용한다. 고정 주민과 RP 캐릭터는 익명 고정닉, 유저는 자동 유동닉/직접 설정 고정닉. 반고닉 없음.',
       everytime:'에브리타임: 각 작성자를 익명1, 익명2, 익명3처럼 숫자형 익명 표기로 구분하라. 실명, 회사명, 직급, 다른 플랫폼 아이디를 사용하지 마라. 같은 residentId는 같은 익명 번호를 재사용한다.',
-      office:'사내 익명 게시판: 같은 회사 직원들만 사용한다. 익명사원, 기획팀막내, 야근탈출러처럼 사내 게시판에 맞는 익명 별명을 사용하되 실명이나 다른 회사 이름을 붙이지 마라.',
+      office:'사내 익명 게시판: 게시글·댓글·대댓글의 nick을 모두 팀/부서명 · 별명 형식으로 작성하라(구매팀 · 퇴근요정). 세계관에 확인된 부서를 우선 사용하고 모르면 부서미상으로 표시하라. 다른 회사명이나 실명은 쓰지 마라.',
       reddit:'Reddit: 영어를 사용하는 Reddit 특유의 자연스러운 게시글·댓글·대댓글을 작성하라. 모든 게시글·댓글 작성자는 u/로 시작하는 서로 다른 창의적인 영문 또는 영숫자 핸들을 사용한다. 익명직장인, 부서명 · 닉네임, 실명을 쓰지 마라.',
       x:'X: 모든 작성자는 @로 시작하는 짧고 개성 있는 영문·숫자·밑줄 핸들을 사용한다(예: @midnightcoffee, @afterwork_24). 실명, 회사명 · 별명, 익명직장인, @anonymous 같은 획일적 이름을 사용하지 마라.',
       neighborhood:'동네 게시판: 동네산책러, 골목길냥집사, 우리동네빵순이처럼 동네생활에 어울리는 서로 다른 자연스러운 별명을 사용하고 실명이나 회사명 형식을 쓰지 마라.'
@@ -1185,9 +1185,43 @@
     const fixed=id&&currentBoard()?.residents?.[id];
     return fixed?fixed.nick:galleryFluidNick(id||item?.id||'guest');
   }
+  // Office nicknames show a department and an anonymous alias, never a real name.
+  // Existing stored posts remain unchanged; only newly generated identities are normalized.
+  function officeDepartment(text){
+    const value=short(text,20000);
+    const departmentPattern='([가-힣A-Za-z0-9]{2,22}(?:팀|부서|본부|파트|실|센터))';
+    const labeled=new RegExp('(?:소속\\s*(?:부서|팀)?|부서명|소속팀|근무\\s*부서|부서|팀명)\\s*[:：-]\\s*'+departmentPattern);
+    const m=labeled.exec(value);
+    if(m)return m[1];
+    const free=new RegExp('(?:^|[\\s(（,·])'+departmentPattern+'(?=[\\s)）,.\\/]|$)');
+    const guess=free.exec(value);
+    if(guess&&!/^(?:우리팀|다른팀|회사팀|전체팀)$/.test(guess[1]))return guess[1];
+    return '';
+  }
+  function userOfficeDepartment(){
+    const settings=data?.settings||{},user=settings.savedProfiles?.user||{};
+    for(const text of [user.description,settings.profiles?.user]){
+      const dept=officeDepartment(text);
+      if(dept)return dept;
+    }
+    return '부서미상';
+  }
+  function officeNick(rawNick,residentId,characterKey=''){
+    const board=currentBoard(),id=short(residentId||'',75);
+    const existing=id&&board.residents?.[id]?.nick;
+    const seed=String(id||characterKey||rawNick||uid());
+    const source=short(existing||rawNick,60);
+    const parts=source.split(/\\s*·\\s*/);
+    const dept=parts.length>1&&/^[가-힣A-Za-z0-9]{2,24}(?:팀|부서|본부|파트|실|센터)$/.test(parts[0])?parts[0]:'';
+    let alias=parts.length>1?parts.slice(1).join(' ').trim():source;
+    if(!alias||genericPlatformNames.test(alias)||isRpRealName(alias)||/^(?:익명사원\\d*|익명직원\\d*|부서미상)$/.test(alias))
+      alias=platformAlias('office',seed);
+    return short((dept||'부서미상')+' · '+alias,60);
+  }
   function communityNick(rawNick,residentId,company,characterKey=''){
     const type=currentCommunity().id;
     if(type==='blind')return blindNick(rawNick,residentId,company);
+    if(type==='office')return officeNick(rawNick,residentId,characterKey);
     if(type==='gallery')return characterKey?galleryFixedAlias('character:'+characterKey):galleryFluidNick(residentId||uid());
     const board=currentBoard(),id=short(residentId||'',75);
     // Previously saved AI identities are reused only if they already follow
@@ -1213,7 +1247,7 @@
         if(handle.length>=2&&validX('@'+handle.slice(0,15)))return '@'+handle.slice(0,15);
         return '@'+platformAlias('x',seed).slice(0,15);
       }
-      if(type==='office'||type==='neighborhood'){
+      if(type==='neighborhood'){
         if(!isInvalid(n))return n;
         return platformAlias(type,seed);
       }
@@ -1307,12 +1341,22 @@
         const pair=custom.split(/\s*·\s*/);
         return pair.length>1&&validBlindCompany(pair[0])?short(custom,60):short(userBlindCompany()+' · '+custom,60);
       }
+      if(type==='office'){
+        const pair=custom.split(/\s*·\s*/);
+        const dept=pair.length>1&&/^[가-힣A-Za-z0-9]{2,24}(?:팀|부서|본부|파트|실|센터)$/.test(pair[0])?pair[0]:userOfficeDepartment();
+        return short(dept+' · '+(pair.length>1?pair.slice(1).join(' ').trim():custom),60);
+      }
       return short(custom,60);
     }
     const board=currentBoard();
     if(type==='gallery'){
       if(!board.userGallerySeed){board.userGallerySeed=uid();saved();}
       return galleryFluidNick('user:'+board.userGallerySeed);
+    }
+    if(type==='office'){
+      const seed='user:'+String(room||'room')+':office';
+      const nickname=officeNick(platformAlias('office',seed),seed);
+      return userOfficeDepartment()+' · '+nickname.split(' · ').slice(1).join(' · ');
     }
     if(type==='blind'){
       if(!board.userBlindNickname){
