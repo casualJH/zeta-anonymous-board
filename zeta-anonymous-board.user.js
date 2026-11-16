@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.4.5
+// @version      0.5.0
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.4.5', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.5.0', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -38,9 +38,10 @@
     {id:'office',name:'사내 익명 게시판',desc:'같은 회사 직원들이 일상과 소문을 나눔',nick:'익명직원, 개발팀 익명',style:'사내 익명 게시판 말투'},
     {id:'reddit',name:'Reddit',desc:'서브레딧식 토론, 농담과 반응',nick:'u/name',style:'Reddit 토론 문화에 맞는 말투를 한국어로 자연스럽게 표현'},
     {id:'x',name:'X',desc:'짧은 글, 실시간 화제와 반응',nick:'@handle',style:'짧고 속도감 있는 SNS 말투'},
-    {id:'neighborhood',name:'동네 게시판',desc:'동네 생활, 목격담과 지역 정보',nick:'동네산책러, 이웃주민',style:'주민 카페 말투'}
+    {id:'neighborhood',name:'동네 게시판',desc:'동네 생활, 목격담과 지역 정보',nick:'동네산책러, 이웃주민',style:'주민 카페 말투'},
+    {id:'gallery',name:'갤러리',desc:'세계관에 어울리는 관심사와 일상을 나누는 한국어 게시판',nick:'ㅇㅇ(가상 IP), 고정닉',style:'자연스러운 반말과 갤러리식 표현'}
   ];
-  const defaults=()=>({auto:true,turns:1,autoDelaySeconds:10,posts:3,newComments:7,oldComments:10,oldPostWindow:20,quiet:'daily',model:'gemini-3.5-flash-lite',fallback:'gemini-3.1-flash-lite',temperature:0.9,guide:'',userNickMode:'auto',userNick:'',selected:'everytime',boardTitles:{},topTitles:{},translationEnabled:{reddit:true},communityConfirmed:false,custom:[],status:'',profiles:{user:'',characters:'',world:''},profileSelection:{userId:'',characterIds:[]},savedProfiles:null});
+  const defaults=()=>({auto:true,turns:1,autoDelaySeconds:10,posts:3,newComments:7,oldComments:10,oldPostWindow:20,quiet:'daily',model:'gemini-3.5-flash-lite',fallback:'gemini-3.1-flash-lite',temperature:0.9,guide:'',userNickMode:'auto',userNick:'',selected:'everytime',boardTitles:{},topTitles:{},translationEnabled:{reddit:true},galleryDescription:'',communityConfirmed:false,custom:[],status:'',profiles:{user:'',characters:'',world:''},profileSelection:{userId:'',characterIds:[]},savedProfiles:null});
   const now=()=>Date.now(), uid=()=> (crypto.randomUUID?.()||'id-'+now().toString(36)+'-'+Math.random().toString(36).slice(2));
   const num=(x,min,max,d)=>{const n=Number(x);return Number.isFinite(n)?Math.max(min,Math.min(max,Math.trunc(n))):d;};
   const copy=x=>JSON.parse(JSON.stringify(x));
@@ -384,6 +385,7 @@
       return school?school+' 자유게시판':'게시판';
     }
     if(id==='blind')return '토픽·블라블라';
+    if(id==='gallery')return '갤러리';
     if(id==='office'){
       const company=worldName([
         /(?:회사|직장|소속|근무지|재직|기업|회사명)\s*[:：-]?\s*([가-힣A-Za-z0-9]{2,22}(?:그룹|기업|전자|건설|금융|테크|산업|통신|상사|제약|은행|보험|모터스|솔루션|유통|물산|바이오|시스템즈|홀딩스))/,
@@ -932,7 +934,7 @@
   function translationFor(id){const opts=data?.settings?.translationEnabled;return opts&&Object.prototype.hasOwnProperty.call(opts,id)?!!opts[id]:id==='reddit';}
   function startCommunityDraft(){
     const s=data.settings,id=s.selected;
-    communityDraft={id,title:short(s.boardTitles?.[id]||'',100),translate:translationFor(id),custom:{name:'',title:'',desc:'',style:'',example:''}};
+    communityDraft={id,title:short(s.boardTitles?.[id]||'',100),translate:translationFor(id),galleryDescription:short(s.galleryDescription||'',2000),custom:{name:'',title:'',desc:'',style:'',example:''}};
   }
   function selectCommunityDraft(id){
     if(!communityDraft)startCommunityDraft();
@@ -945,7 +947,7 @@
     if(!data?.settings?.communityConfirmed)return false;
     if(!communityDraft)return true;
     const d=communityDraft,s=data.settings;
-    return d.id===s.selected&&d.title===(s.boardTitles?.[s.selected]||'')&&d.translate===translationFor(s.selected);
+    return d.id===s.selected&&d.title===(s.boardTitles?.[s.selected]||'')&&d.translate===translationFor(s.selected)&&(d.id!=='gallery'||d.galleryDescription===(s.galleryDescription||''));
   }
   function refreshCommunityConfirmButton(){
     const el=panel?.querySelector('button[data-act="confirm-community"]');
@@ -971,6 +973,7 @@
     if(d.title)s.boardTitles[id]=short(d.title,100);else delete s.boardTitles[id];
     s.translationEnabled=s.translationEnabled&&typeof s.translationEnabled==='object'?s.translationEnabled:{};
     s.translationEnabled[id]=!!d.translate;
+    if(id==='gallery')s.galleryDescription=short(d.galleryDescription,2000);
     if(id!==s.selected)communityChange(id);
     s.communityConfirmed=true;s.communityConfirmV043=true;
     communityDraft=null;saved();render();show('커뮤니티 설정을 저장했어요.');
@@ -1054,11 +1057,12 @@
     }
   }
   function promptPayload(kind,post){const b=currentBoard(),s=data.settings,community=currentCommunity(),recent=observedTurns.slice(-Math.max(10,num(s.turns,1,999,1)+5)).map((t,i)=>({turn:i+1,content:t.parts.map(p=>`${p.speaker} (${p.role}): ${short(p.text,1300)}`).join('\n').slice(0,4500)}));const older=b.posts.slice(-num(s.oldPostWindow,0,300,20)).map(p=>({id:p.id,title:p.title,body:short(p.body,850),comments:p.comments.slice(-12).map(c=>({id:c.id,author:c.nick,source:c.source||'ai',text:short(c.text,450),replies:safeArray(c.replies).slice(-5).map(r=>({id:r.id,author:r.nick,source:r.source||'ai',text:short(r.text,220)}))}))}));const residents=Object.values(b.residents).slice(-40);
-    const communityRules=community.id==='blind'?
+    const communityRules=community.id==='gallery'?'갤러리에서는 세계관에 맞는 주제와 관심사를 다루고, 짧은 반말과 한국 인터넷 갤러리식 표현을 상황에 맞게 자연스럽게 사용하라. 일회성 AI 주민은 유동닉 ㅇㅇ(가상 IP), 서로 다른 게시글에 반복 등장하여 확정된 고정 주민과 RP 캐릭터는 고정닉을 사용한다. 반고닉은 사용하지 않는다. 유저는 기본 유동닉이며 직접 닉네임을 지정하면 고정닉이다. 실제 IP를 수집하거나 추측하지 마라.':community.id==='blind'?
       '블라인드는 여러 회사의 직원이 참여하는 외부 직장인 커뮤니티다. 현재 RP 회사의 사내 게시판이 아니다. 서로 다른 업종·회사에 다니는 글쓴이들을 혼합하고 새 글의 과반수는 현재 RP 중심 회사와 무관한 다른 회사의 직장 생활·업계 이야기를 다뤄라. 필요한 경우 가상의 회사명을 자연스럽게 창작해도 되나, 개인에 대한 사실로 단정하지 마라. 게시글/댓글 작성자 닉네임은 반드시 세계관에 맞는 회사명 · 개성 있는 익명 별명 형태로 작성하라(예: 대한그룹 · 퇴사각재는중, 한빛전자 · 칼퇴하고싶다). 회사명 자리에 부서명·직급·팀명을 절대 넣지 말고, 실명·프로필 이름·익명직장인 같은 고정 이름을 사용하지 마라. 같은 주민 residentId는 회사와 닉네임을 유지하고, 다른 주민은 회사·별명을 다양하게 만들어라. 게시글과 댓글 JSON에 company 필드를 회사명으로 함께 제공하라. 특정 회사 내부에서만 알 수 있는 정보는 외부인이 본 것처럼 단정하지 마라.':community.id==='office'?
       '사내 익명 게시판은 현재 RP에서 다니는 회사 소속 구성원만 참여한다. 외부 회사 직원이 사내 직원으로 글을 쓰지 않도록 하고, 부서·팀 관점의 회사 내부 일상과 공개 가능한 직장 소문을 중심으로 작성하라. 외부 기업 직원의 일반 블라인드 게시글처럼 작성하지 마라.':
       '';
     const nicknameRules={
+      gallery:'갤러리: 일회성 AI 주민만 ㅇㅇ(가상 IP) 유동닉을 사용한다. 고정 주민과 RP 캐릭터는 익명 고정닉, 유저는 자동 유동닉/직접 설정 고정닉. 반고닉 없음.',
       everytime:'에브리타임: 각 작성자를 익명1, 익명2, 익명3처럼 숫자형 익명 표기로 구분하라. 실명, 회사명, 직급, 다른 플랫폼 아이디를 사용하지 마라. 같은 residentId는 같은 익명 번호를 재사용한다.',
       office:'사내 익명 게시판: 같은 회사 직원들만 사용한다. 익명사원, 기획팀막내, 야근탈출러처럼 사내 게시판에 맞는 익명 별명을 사용하되 실명이나 다른 회사 이름을 붙이지 마라.',
       reddit:'Reddit: 영어를 사용하는 Reddit 특유의 자연스러운 게시글·댓글·대댓글을 작성하라. 모든 게시글·댓글 작성자는 u/로 시작하는 서로 다른 창의적인 영문 또는 영숫자 핸들을 사용한다. 익명직장인, 부서명 · 닉네임, 실명을 쓰지 마라.',
@@ -1067,12 +1071,13 @@
     };
     const nicknameRule=nicknameRules[community.id]||'작성자의 닉네임은 해당 커뮤니티가 지정한 닉네임 형식에 맞고 서로 구분되어야 한다. 주민 ID가 같으면 기존 닉네임을 유지한다.';
     const customStyle=community.id.startsWith('custom-')?['[커뮤니티 소개] '+short(community.desc,1500),'[말투 지침] '+short(community.style,2000),'[말투 예시 (그대로 복사하지 말 것)] '+short(community.styleExample,2000)].join('\n'):'';
+    const galleryTopic=community.id==='gallery'?'[갤러리 이름] '+communityBoardTitle()+'\n[갤러리 소개·주제] '+short(s.galleryDescription,2000):'';
     const instructions=`선택된 RP 캐릭터가 공개적으로 직접 커뮤니티 활동을 할 법한 상황에서는 그 캐릭터의 게시글·댓글·대댓글을 포함할 수 있다. 캐릭터가 직접 작성한 경우 characterProfileId에 [수집된 프로필].selectedCharacters에 포함된 캐릭터의 정확한 프로필 id 또는 _key를 넣어라. 일반 주민은 이 필드를 빈 문자열로 두어라. 실제로 작성하지 않은 캐릭터를 사칭하지 말고 캐릭터 실명을 닉네임으로 노출하지 마라. 당신은 가상의 RP 세계에 실제 거주하는 익명 커뮤니티 운영 시뮬레이터다. 관찰자·독자가 아니라 세계관 주민의 입장에서 작성하라. 공개적으로 목격·전달될 수 있는 사건만 목격 사실로 쓰고, 비밀 대화·내면·보이지 않는 사적 행동을 누설하지 마라. 소문은 반드시 소문/추측으로 표현하라. RP 주인공에 관한 글과 주민들의 독립적인 일상을 자연스럽게 섞고, 주어진 세계관의 주요 사실을 바꾸지 않는 선에서 새로운 회사·가게·지역·주민 등 배경 요소 창작은 허용한다. 기존 주민 ID는 재사용 가능하며 새로운 주민을 만들어도 된다. 사용자 글과 댓글은 삭제·수정하지 마라. 기존 사용자 댓글에 관련성 있는 AI 답글을 적절히 달고, 이미 AI가 답한 댓글에는 같은 내용의 답글을 반복하지 마라. 글과 댓글의 닉네임은 해당 커뮤니티에 맞게 만들고, 대댓글은 최대 한 단계. 출력은 반드시 JSON 객체 하나이며 Markdown 코드펜스는 제외.`;
     const schema=`JSON 형태: {"posts":[{"title":"제목 원문","titleKo":"제목 한국어 번역","body":"본문 원문","bodyKo":"본문 한국어 번역","company":"소속 회사명(블라인드)","nick":"회사명 · 익명 별명(블라인드)","characterProfileId":"RP 캐릭터 본인인 경우에만 선택된 캐릭터의 프로필 id 또는 _key, 일반 주민이면 빈 문자열","residentId":"재사용할 주민 ID 또는 새 주민용 임의 별칭","views":10,"likes":2,"comments":[{"company":"소속 회사명(블라인드)","nick":"회사명 · 익명 별명(블라인드)","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"댓글 원문","textKo":"댓글 한국어 번역","likes":1,"replies":[{"company":"소속 회사명(블라인드)","nick":"회사명 · 익명 별명(블라인드)","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"대댓글 원문","textKo":"대댓글 한국어 번역","likes":0}]}]}],"updates":[{"postId":"과거 게시글 ID","comments":[{"company":"소속 회사명(블라인드)","nick":"회사명 · 익명 별명(블라인드)","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"추가 댓글 원문","textKo":"추가 댓글 한국어 번역","likes":0,"replies":[]}],"replies":[{"parentCommentId":"기존 사용자 댓글 ID","company":"소속 회사명(블라인드)","nick":"회사명 · 익명 별명(블라인드)","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"사용자 댓글에 대한 대댓글 원문","textKo":"대댓글 한국어 번역","likes":0}]}]}. 원본에 없는 postId는 사용 금지.`;
     const translationRule=translationOn()?'[번역 ON] 영어 원문 등 해당 커뮤니티에 자연스러운 원문 언어로 먼저 작성하라. 원문 제목·본문·댓글·대댓글은 각각 title/body/text에 넣고, 같은 내용의 자연스럽고 충실한 한국어 번역을 titleKo/bodyKo/textKo에 함께 넣어라. Reddit에서는 영어 원문을 우선 생성하고 영어 인터넷 특유의 표현과 말투를 유지한다. 한국어 번역은 원문 의미를 누락하거나 창작하지 말고 대응시켜라. 모든 AI 신규/추가 댓글/대댓글에 번역 필드를 제공하라. 사용자 원문을 수정하거나 번역하여 다시 내보내지 마라.':'[번역 OFF] 원래 커뮤니티에 어울리는 언어와 말투로 작성하고 한국어 번역 필드는 생략하거나 빈 문자열로 둬라.';
     const userLanguageRule='[사용자 작성글 언어 해석 · 모든 커뮤니티 공통] 사용자가 직접 작성한 게시글·댓글·대댓글은 입력 언어와 관계없이 해당 커뮤니티의 기본 언어로 작성된 발언으로 간주하라. 주민과 RP 캐릭터는 해당 커뮤니티의 기본 언어로 된 발언을 읽은 것처럼 의미와 어조를 이해하고 자연스럽게 반응하라. 답변은 해당 커뮤니티의 언어와 말투를 따르라. 사용자 원문은 수정하지 않고 그대로 보존하라. 입력 언어가 다르다는 이유로 언어 차이를 지적하지 마라.';
     const task=kind==='react'?`아래 사용자 게시글/댓글을 대상으로 AI 주민의 반응만 생성. 새 게시글은 0개. 대상 글 ID=${post?.id||''}. 이전 글 중 해당 글에만 댓글 또는 기존 사용자 댓글에 대한 대댓글을 추가.`:`새 게시글 ${num(s.posts,1,15,3)}개를 목표로 생성하라. 새 게시글당 댓글 최대 ${num(s.newComments,0,30,7)}개. 기존 최근 ${num(s.oldPostWindow,0,300,20)}개 글 중 내용 관련성이 높은 글에만 추가 댓글을 작성하되, 모든 기존 글에 추가되는 댓글·대댓글 총합은 ${num(s.oldComments,0,100,10)}개 이하. 특히 관련성 있는 기존 사용자 댓글(source=user)을 확인해 해당 댓글 ID로 replies를 작성하라. ${s.quiet==='skip'?'공개 사건이 전혀 없다면 게시글과 댓글 생성 생략':s.quiet==='rumors'?'새 사건이 없으면 기존 소문만 이어가기':'새 사건이 없으면 세계관 주민 일상 글 작성'}.`;
-    return `${instructions}\n${userLanguageRule}\n[번역 출력 규칙] ${translationRule}\n[사용자 지정 커뮤니티 지침] ${customStyle}\n[커뮤니티별 작성 규칙] ${communityRules}\n[닉네임 필수 규칙] ${nicknameRule}\n${schema}\n[작업] ${task}\n[커뮤니티] ${JSON.stringify(community)}\n[커뮤니티별 생성 지침] ${short(s.guide,5000)}\n[수집된 프로필] ${JSON.stringify({user:short(s.profiles.user,5000),characters:short(s.profiles.characters,9000),world:short(s.profiles.world,6500),selectedCharacters:profileSelection().characters.slice(0,30),selectedUser:profileSelection().user})}\n[최근 RP 대화 (개인정보 및 비공개 사실은 주민에게 직접 노출 금지)] ${JSON.stringify(recent).slice(0,20000)}\n[기존 주민] ${JSON.stringify(residents).slice(0,7500)}\n[최근 커뮤니티 게시글] ${JSON.stringify(older).slice(0,14000)}\n[사용자 반응 대상] ${JSON.stringify(post||{}).slice(0,5000)}\nJSON 객체만 답하라.`;
+    return `${instructions}\n${userLanguageRule}\n[번역 출력 규칙] ${translationRule}\n${galleryTopic}\n[사용자 지정 커뮤니티 지침] ${customStyle}\n[커뮤니티별 작성 규칙] ${communityRules}\n[닉네임 필수 규칙] ${nicknameRule}\n${schema}\n[작업] ${task}\n[커뮤니티] ${JSON.stringify(community)}\n[커뮤니티별 생성 지침] ${short(s.guide,5000)}\n[수집된 프로필] ${JSON.stringify({user:short(s.profiles.user,5000),characters:short(s.profiles.characters,9000),world:short(s.profiles.world,6500),selectedCharacters:profileSelection().characters.slice(0,30),selectedUser:profileSelection().user})}\n[최근 RP 대화 (개인정보 및 비공개 사실은 주민에게 직접 노출 금지)] ${JSON.stringify(recent).slice(0,20000)}\n[기존 주민] ${JSON.stringify(residents).slice(0,7500)}\n[최근 커뮤니티 게시글] ${JSON.stringify(older).slice(0,14000)}\n[사용자 반응 대상] ${JSON.stringify(post||{}).slice(0,5000)}\nJSON 객체만 답하라.`;
   }
   function parseGemini(result){let text=safeArray(result.candidates?.[0]?.content?.parts).map(p=>p.text||'').join('').trim();text=text.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');try{return JSON.parse(text);}catch{const m=/\{[\s\S]*\}/.exec(text);if(m)return JSON.parse(m[0]);throw new Error('Gemini JSON 형식 오류');}}
   // Blind's displayed identity uses a company, not a department or a real person.
@@ -1136,9 +1141,28 @@
     const first=list[hashLabel(type+':'+seed)%list.length];
     return first;
   }
-  function communityNick(rawNick,residentId,company){
+  // Fictional two-octet labels, not real or queried IP addresses.
+  function galleryFluidNick(seed){
+    const h=hashLabel('gallery-ip:'+String(room||'')+':'+String(seed));
+    return 'ㅇㅇ('+[39,59,61,106,110,112,118,121,175,211,223][h%11]+'.'+(1+Math.floor(h/11)%254)+')';
+  }
+  function galleryFixedAlias(seed){
+    const first=['새벽','동네','구석','하루','달빛','소금','느긋한','야식','초록','밤샘','작은','푸른'];
+    const last=['갤러','산책러','구경꾼','메모장','모험가','잠꾸러기','관찰자','수다쟁이','덕후','고양이','주민','책벌레'];
+    const h=hashLabel('gallery-fixed:'+String(room||'')+':'+String(seed));
+    return first[h%first.length]+last[Math.floor(h/first.length)%last.length];
+  }
+  function galleryDisplayNick(item){
+    if(item?.source==='user')return item.nick||galleryFluidNick('user');
+    if(item?.characterProfileId)return galleryFixedAlias('character:'+item.characterProfileId);
+    const id=short(item?.residentId||'',75);
+    const fixed=id&&currentBoard()?.residents?.[id];
+    return fixed?fixed.nick:galleryFluidNick(id||item?.id||'guest');
+  }
+  function communityNick(rawNick,residentId,company,characterKey=''){
     const type=currentCommunity().id;
     if(type==='blind')return blindNick(rawNick,residentId,company);
+    if(type==='gallery')return characterKey?galleryFixedAlias('character:'+characterKey):galleryFluidNick(residentId||uid());
     const board=currentBoard(),id=short(residentId||'',75);
     // Previously saved AI identities are reused only if they already follow
     // this community format (not a name carried over from another community).
@@ -1189,8 +1213,8 @@
     const kind=item?.source==='user'?'zab-author-me-name':label?'zab-author-character-name':'';
     return '<span class="'+kind+'">'+esc(item?.nick||'익명')+'</span>'+label;
   }
-  function normalizeComment(raw){const rpTime=currentRpStamp();const c={id:uid(),characterProfileId:characterAuthorKey(raw),textKo:translationOn()?short(raw.textKo||'',3500):'',nick:communityNick(raw.nick,raw.residentId,raw.company),residentId:short(raw.residentId||'',75),text:short(raw.text,3500),likes:num(raw.likes,0,999999,0),time:now(),rpTime,source:'ai',replies:[]};c.replies=safeArray(raw.replies).slice(0,12).map(r=>({id:uid(),characterProfileId:characterAuthorKey(r),textKo:translationOn()?short(r.textKo||'',3000):'',nick:communityNick(r.nick,r.residentId,r.company),residentId:short(r.residentId||'',75),text:short(r.text,3000),likes:num(r.likes,0,999999,0),time:now(),rpTime,source:'ai',parentId:c.id})).filter(x=>x.text);return c;}
-  function applyResult(out,kind,replaceBatch){if(!out||typeof out!=='object')throw new Error('Gemini 생성 결과가 올바르지 않아요.');const board=currentBoard();if(replaceBatch)rollback(replaceBatch);const batch={id:uid(),created:[],comments:[],metrics:{},temporary:kind==='auto',time:now()};const posts=kind==='react'?[]:safeArray(out.posts).slice(0,num(data.settings.posts,1,15,3));for(const raw of posts){if(!String(raw.title||'').trim()&&!String(raw.body||'').trim())continue;const p={id:uid(),characterProfileId:characterAuthorKey(raw),titleKo:translationOn()?short(raw.titleKo||'',180):'',bodyKo:translationOn()?short(raw.bodyKo||'',8500):'',title:short(raw.title||'무제',180),body:short(raw.body,8500),nick:communityNick(raw.nick,raw.residentId,raw.company),residentId:short(raw.residentId||'',75),views:num(raw.views,0,10000000,10),likes:num(raw.likes,0,10000000,0),time:now(),rpTime:currentRpStamp(),source:'ai',comments:safeArray(raw.comments).slice(0,num(data.settings.newComments,0,30,7)).map(normalizeComment).filter(c=>c.text)};board.posts.push(p);batch.created.push(p.id);}
+  function normalizeComment(raw){const rpTime=currentRpStamp();const c={id:uid(),characterProfileId:characterAuthorKey(raw),textKo:translationOn()?short(raw.textKo||'',3500):'',nick:communityNick(raw.nick,raw.residentId,raw.company,characterAuthorKey(raw)),residentId:short(raw.residentId||'',75),text:short(raw.text,3500),likes:num(raw.likes,0,999999,0),time:now(),rpTime,source:'ai',replies:[]};c.replies=safeArray(raw.replies).slice(0,12).map(r=>({id:uid(),characterProfileId:characterAuthorKey(r),textKo:translationOn()?short(r.textKo||'',3000):'',nick:communityNick(r.nick,r.residentId,r.company),residentId:short(r.residentId||'',75),text:short(r.text,3000),likes:num(r.likes,0,999999,0),time:now(),rpTime,source:'ai',parentId:c.id})).filter(x=>x.text);return c;}
+  function applyResult(out,kind,replaceBatch){if(!out||typeof out!=='object')throw new Error('Gemini 생성 결과가 올바르지 않아요.');const board=currentBoard();if(replaceBatch)rollback(replaceBatch);const batch={id:uid(),created:[],comments:[],metrics:{},temporary:kind==='auto',time:now()};const posts=kind==='react'?[]:safeArray(out.posts).slice(0,num(data.settings.posts,1,15,3));for(const raw of posts){if(!String(raw.title||'').trim()&&!String(raw.body||'').trim())continue;const p={id:uid(),characterProfileId:characterAuthorKey(raw),titleKo:translationOn()?short(raw.titleKo||'',180):'',bodyKo:translationOn()?short(raw.bodyKo||'',8500):'',title:short(raw.title||'무제',180),body:short(raw.body,8500),nick:communityNick(raw.nick,raw.residentId,raw.company,characterAuthorKey(raw)),residentId:short(raw.residentId||'',75),views:num(raw.views,0,10000000,10),likes:num(raw.likes,0,10000000,0),time:now(),rpTime:currentRpStamp(),source:'ai',comments:safeArray(raw.comments).slice(0,num(data.settings.newComments,0,30,7)).map(normalizeComment).filter(c=>c.text)};board.posts.push(p);batch.created.push(p.id);}
     let count=0;const eligible=new Set(board.posts.slice(-num(data.settings.oldPostWindow,0,300,20)-posts.length).filter(p=>!batch.created.includes(p.id)).map(p=>p.id));if(kind==='react'&&replaceBatch?.targetPost)eligible.add(replaceBatch.targetPost);
     for(const update of safeArray(out.updates)){const p=board.posts.find(p=>p.id===update.postId);if(!p||(!eligible.has(p.id)&&!(kind==='react'&&p.id===reactionTarget)))continue;for(const raw of safeArray(update.comments)){const c=normalizeComment(raw);const added=1+c.replies.length;if(count+added>num(data.settings.oldComments,0,100,10))break;if(!c.text)continue;p.comments.push(c);batch.comments.push(c.id,...c.replies.map(r=>r.id));count+=added;}}
     // Attach AI responses to existing user comments, never to the post root.
@@ -1202,7 +1226,7 @@
         const parent=post.comments.find(c=>c.id===raw.parentCommentId&&c.source==='user');
         if(!parent||safeArray(parent.replies).some(x=>x.source==='ai'))continue;
         const replyText=short(raw.text,3000);if(!replyText)continue;
-        const reply={id:uid(),characterProfileId:characterAuthorKey(raw),textKo:translationOn()?short(raw.textKo||'',3000):'',nick:communityNick(raw.nick,raw.residentId,raw.company),residentId:short(raw.residentId||'',75),text:replyText,likes:num(raw.likes,0,999999,0),time:now(),rpTime:currentRpStamp(),source:'ai',parentId:parent.id};
+        const reply={id:uid(),characterProfileId:characterAuthorKey(raw),textKo:translationOn()?short(raw.textKo||'',3000):'',nick:communityNick(raw.nick,raw.residentId,raw.company,characterAuthorKey(raw)),residentId:short(raw.residentId||'',75),text:replyText,likes:num(raw.likes,0,999999,0),time:now(),rpTime:currentRpStamp(),source:'ai',parentId:parent.id};
         parent.replies.push(reply);batch.comments.push(reply.id);count++;
       }
     }
@@ -1232,7 +1256,7 @@
     const previous=board.residents&&typeof board.residents==='object'?board.residents:{};
     const fixed={};
     for(const [id,row] of appearances){
-      if(row.posts.size>=2)fixed[id]={id,nick:previous[id]?.nick||row.nick};
+      if(row.posts.size>=2)fixed[id]={id,nick:previous[id]?.nick||(currentCommunity().id==='gallery'?galleryFixedAlias('resident:'+id):row.nick)};
     }
     for(const [id,row] of Object.entries(previous)){
       if(row?.pinned&&id!=='user')fixed[id]={id,nick:row.nick,pinned:true};
@@ -1260,6 +1284,10 @@
       return short(custom,60);
     }
     const board=currentBoard();
+    if(type==='gallery'){
+      if(!board.userGallerySeed){board.userGallerySeed=uid();saved();}
+      return galleryFluidNick('user:'+board.userGallerySeed);
+    }
     if(type==='blind'){
       if(!board.userBlindNickname){
         const seed=String(room||board.posts.length);
@@ -1411,6 +1439,7 @@
     return map;
   }
   function communityAuthorName(item,post){
+    if(currentCommunity().id==='gallery')return authorName({...item,nick:galleryDisplayNick(item)});
     if(currentCommunity().id!=='everytime'||!post)return authorName(item);
     return authorName({...item,nick:everytimeNames(post).get(item.id)||'익명'});
   }
@@ -1438,6 +1467,7 @@
   <div class="zab-divider"></div><h4>② 커뮤니티 설정</h4>
   <label>현재 커뮤니티</label>
   ${selection('selected',communityDraft?.id||s.selected,[...presets,...s.custom].map(c=>[c.id,c.name]).concat([['__new_custom__','＋ 사용자 지정 커뮤니티']]))}
+  ${communityDraft?.id==='gallery'?`<label>갤러리 소개·주제</label><textarea data-gallery-topic="yes" rows="3" placeholder="예: 우리 학교 학생들의 일상과 소문">${esc(communityDraft.galleryDescription)}</textarea>`:''}
   ${communityDraft?.id==='__new_custom__'?`
     <label>커뮤니티 이름</label><input data-community-field="name" maxlength="80" value="${esc(communityDraft.custom.name)}" placeholder="예: 캠퍼스 대나무숲">
     <label>게시판 이름</label><input data-community-field="title" maxlength="100" value="${esc(communityDraft.custom.title)}" placeholder="예: 자유게시판">
@@ -1491,7 +1521,7 @@
       }
       return;
     }
-    if(el.dataset.communityField){if(!communityDraft)startCommunityDraft();communityDraft.custom[el.dataset.communityField]=short(el.value,el.dataset.communityField==='name'?80:el.dataset.communityField==='title'?100:2000);refreshCommunityConfirmButton();return;}if(el.dataset.communityTitle==='yes'){if(!communityDraft)startCommunityDraft();communityDraft.title=short(el.value,100);refreshCommunityConfirmButton();return;}if(!el.dataset.resident)return;const r=currentBoard().residents[el.dataset.resident];if(r){r.nick=short(el.value,60);saved();}}
+    if(el.dataset.galleryTopic==='yes'){if(!communityDraft)startCommunityDraft();communityDraft.galleryDescription=short(el.value,2000);refreshCommunityConfirmButton();return;}if(el.dataset.communityField){if(!communityDraft)startCommunityDraft();communityDraft.custom[el.dataset.communityField]=short(el.value,el.dataset.communityField==='name'?80:el.dataset.communityField==='title'?100:2000);refreshCommunityConfirmButton();return;}if(el.dataset.communityTitle==='yes'){if(!communityDraft)startCommunityDraft();communityDraft.title=short(el.value,100);refreshCommunityConfirmButton();return;}if(!el.dataset.resident)return;const r=currentBoard().residents[el.dataset.resident];if(r){r.nick=short(el.value,60);saved();}}
   function onChange(e){const el=e.target;if(el.id==='zab-import-file'){const file=el.files?.[0];if(file)importJSON(file);el.value='';return;}if(!data)return;
     if(el.dataset.profileUser==='yes'||el.hasAttribute('data-profile-character')){
       const previous=profileDraftSelection;
