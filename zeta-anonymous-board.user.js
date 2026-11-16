@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.9.12
+// @version      0.9.13
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.9.12', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.9.13', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1176,7 +1176,7 @@
   }
   function promptPayload(kind,post){const b=currentBoard(),s=data.settings,community=currentCommunity(),recent=observedTurns.slice(-Math.max(10,num(s.turns,1,999,1)+5)).map((t,i)=>({turn:i+1,content:t.parts.map(p=>`${p.speaker} (${p.role}): ${short(p.text,1300)}`).join('\n').slice(0,4500)}));const older=b.posts.slice(-num(s.oldPostWindow,0,300,20)).map(p=>({id:p.id,title:p.title,body:short(p.body,850),comments:p.comments.slice(-12).map(c=>({id:c.id,author:community.id==='gallery'?galleryDisplayNick(c):c.nick,source:c.source||'ai',text:short(c.text,450),replies:safeArray(c.replies).slice(-5).map(r=>({id:r.id,author:community.id==='gallery'?galleryDisplayNick(r):r.nick,source:r.source||'ai',text:short(r.text,220)}))}))}));const residents=Object.values(b.residents).slice(-40);
     const communityRules=community.id==='gallery'?'갤러리에서는 세계관에 맞는 주제와 관심사를 다루고, 짧은 반말과 한국 인터넷 갤러리식 표현을 상황에 맞게 자연스럽게 사용하라. 일회성 AI 주민은 유동닉 ㅇㅇ(가상 IP), 서로 다른 게시글에 반복 등장하여 확정된 고정 주민과 RP 캐릭터는 고정닉을 사용한다. 반고닉은 사용하지 않는다. 유저는 기본 유동닉이며 직접 닉네임을 지정하면 고정닉이다. 실제 IP를 수집하거나 추측하지 마라.':community.id==='blind'?
-      '블라인드는 여러 회사의 직원이 참여하는 외부 직장인 커뮤니티다. 현재 RP 회사의 사내 게시판이 아니다. 서로 다른 업종·회사에 다니는 글쓴이들을 혼합하고 새 글의 과반수는 현재 RP 중심 회사와 무관한 다른 회사의 직장 생활·업계 이야기를 다뤄라. 필요한 경우 가상의 회사명을 자연스럽게 창작해도 되나, 개인에 대한 사실로 단정하지 마라. 게시글/댓글 작성자 닉네임은 반드시 세계관에 맞는 회사명 · 개성 있는 익명 별명 형태로 작성하라(예: 대한그룹 · 퇴사각재는중, 한빛전자 · 칼퇴하고싶다). 회사명 자리에 부서명·직급·팀명을 절대 넣지 말고, 실명·프로필 이름·익명직장인 같은 고정 이름을 사용하지 마라. 같은 주민 residentId는 회사와 닉네임을 유지하고, 다른 주민은 회사·별명을 다양하게 만들어라. 게시글과 댓글 JSON에 company 필드를 회사명으로 함께 제공하라. 특정 회사 내부에서만 알 수 있는 정보는 외부인이 본 것처럼 단정하지 마라.':community.id==='office'?
+      '블라인드는 여러 회사의 직원이 참여하는 외부 직장인 커뮤니티다. 현재 RP 회사의 사내 게시판이 아니다. 서로 다른 업종·회사에 다니는 글쓴이들을 혼합하고 새 글의 과반수는 현재 RP 중심 회사와 무관한 다른 회사의 직장 생활·업계 이야기를 다뤄라. 필요한 경우 가상의 회사명을 자연스럽게 창작해도 되나, 개인에 대한 사실로 단정하지 마라. 게시글/댓글 작성자의 회사명과 별명은 Gemini가 직접 결정하라. 일반 AI 주민의 회사는 세계관에 맞게 창작할 수 있지만 유저·RP 캐릭터의 회사는 명시적으로 확인된 소속만 사용하라. 확인되지 않은 소속은 창작하지 말고 company는 빈 문자열로 두며 닉네임의 회사 자리는 소속미확인으로 표시하라. 닉네임은 회사명 · 개성 있는 익명 별명 형태로 작성하라(예: 대한그룹 · 퇴사각재는중, 한빛전자 · 칼퇴하고싶다). 회사명 자리에 부서명·직급·팀명을 절대 넣지 말고, 실명·프로필 이름·익명직장인 같은 고정 이름을 사용하지 마라. 같은 주민 residentId는 회사와 닉네임을 유지하고, 다른 주민은 회사·별명을 다양하게 만들어라. 게시글과 댓글 JSON에 company 필드를 회사명으로 함께 제공하라. 특정 회사 내부에서만 알 수 있는 정보는 외부인이 본 것처럼 단정하지 마라.':community.id==='office'?
       '사내 익명 게시판은 현재 RP에서 다니는 회사 소속 구성원만 참여한다. 외부 회사 직원이 사내 직원으로 글을 쓰지 않도록 하고, 부서·팀 관점의 회사 내부 일상과 공개 가능한 직장 소문을 중심으로 작성하라. 게시글·댓글·대댓글의 모든 작성자 nick은 반드시 팀/부서명 · 개성 있는 익명 별명 형태로 작성하라(예: 구매팀 · 퇴근요정, 인사팀 · 커피수혈중). 팀/부서명은 제공된 세계관·프로필에서 확인되는 실제 소속을 우선하고, 확인되지 않는 주민에게 임의의 특정 부서 소속을 사실처럼 부여하지 말고 부서미상으로 표시하라. 캐릭터 실명과 다른 회사 이름을 닉네임에 사용하지 말고 같은 residentId의 닉네임을 유지하라. 외부 기업 직원의 일반 블라인드 게시글처럼 작성하지 마라.':
       '';
     const nicknameRules={
@@ -1209,46 +1209,33 @@
     return `${rpFactRules}\n${instructions}\n${userLanguageRule}\n[번역 출력 규칙] ${translationRule}\n${galleryTopic}\n[사용자 지정 커뮤니티 지침] ${customStyle}\n[커뮤니티별 작성 규칙] ${nicknameOverride&&community.id==='blind'?'블라인드는 여러 회사의 직장인이 참여하는 외부 커뮤니티다. 특정 회사 내부의 비공개 정보는 노출하지 마라. 닉네임은 사용자 추가 지침을 우선하라.':nicknameOverride&&community.id==='office'?'사내 익명 게시판은 RP 세계관의 같은 회사 직원들만 참여한다. 닉네임은 사용자 추가 지침을 우선하라.':communityRules}\n[닉네임 필수 규칙] ${nicknameRule}\n${schema}\n[작업] ${task}\n[커뮤니티] ${JSON.stringify(community)}\n[커뮤니티별 생성 지침] ${short(s.communityGuides?.[community.id]||'',5000)}\n[수집된 프로필] ${JSON.stringify({user:short(s.profiles.user,5000),characters:short(s.profiles.characters,9000),world:short(s.profiles.world,6500),selectedCharacters:profileSelection().characters.slice(0,30),selectedUser:profileSelection().user})}\n[최근 RP 대화 (개인정보 및 비공개 사실은 주민에게 직접 노출 금지)] ${JSON.stringify(recent).slice(0,20000)}\n[기존 주민] ${JSON.stringify(residents).slice(0,7500)}\n[최근 커뮤니티 게시글 · 이전 AI 창작물은 실제 RP 사건의 증거가 아님] ${JSON.stringify(older).slice(0,14000)}\n[사용자 반응 대상] ${JSON.stringify(post||{}).slice(0,5000)}\n[최종 사실 검증] 위 RP 사실 및 정보 접근 제한을 제목·본문·댓글·대댓글 전부에 다시 적용하고, 확인되지 않은 유저·캐릭터의 행동·속마음·소문은 제거하라. JSON 객체만 답하라.`;
   }
   function parseGemini(result){let text=safeArray(result.candidates?.[0]?.content?.parts).map(p=>p.text||'').join('').trim();text=text.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');try{return JSON.parse(text);}catch{const m=/\{[\s\S]*\}/.exec(text);if(m)return JSON.parse(m[0]);throw new Error('Gemini JSON 형식 오류');}}
-  // Blind's displayed identity uses a company, not a department or a real person.
-  // User company is derived from saved fictional RP context when available.
-  const blindFictionalCompanies=['대한그룹','한빛전자','미래건설','대성금융','우림테크','다온물산','새빛통신'];
-  const blindAliasWords=['퇴사각재는중','칼퇴하고싶다','월급루팡3년차','연차언제쓰냐','커피수혈중','회의좀그만','퇴근벨울려라','오늘도야근','점심시간만기다림','직장인생존기','출근하기싫다'];
-  const companyPattern=/([가-힣A-Za-z0-9]{2,22}(?:그룹|기업|전자|건설|금융|테크|산업|통신|상사|제약|은행|보험|모터스|솔루션|유통|물산|바이오|시스템즈|홀딩스))/g;
-  const companyGeneric=new Set(['대기업','중소기업','공기업','중견기업','일반기업','벤처기업','사기업']);
+  // Blind company/alias decisions belong to Gemini, not local regexes or name lists.
   const hashLabel=text=>{let h=2166136261;for(const ch of String(text||'')){h=Math.imul(h^ch.charCodeAt(0),16777619);}return h>>>0;};
-  function companiesInText(text){return [...String(text||'').matchAll(companyPattern)].map(m=>m[1]).filter(n=>!companyGeneric.has(n));}
-  function userBlindCompany(){
-    const settings=data?.settings||{};
-    const profile=settings.savedProfiles?.user||{};
-    const texts=[profile.description,settings.profiles?.user,settings.profiles?.world,
-      ...safeArray(settings.savedProfiles?.characters).map(c=>c.description)];
-    for(const t of texts){const names=companiesInText(t);if(names.length)return names[0];}
-    return blindFictionalCompanies[hashLabel(room)%blindFictionalCompanies.length];
-  }
   function validBlindCompany(value){
     const text=short(value,40);
-    if(!text||/팀$|실$|부서$|본부$|직급$|파트$|대리$|과장$|부장$|주임$|직원$|익명/.test(text))return '';
-    // Company names can be user-created in the fictional setting; avoid generic job labels.
-    if(companyGeneric.has(text)||text==='회사원'||text==='직장인')return '';
-    return text;
+    return text&&!/^(?:회사|회사명|기업|직장|익명|직장인|소속미확인|미확인)$/i.test(text)?text:'';
   }
   function blindNick(rawNick,residentId,company){
     const existing=residentId&&currentBoard().residents?.[residentId]?.nick;
-    if(existing&&existing.includes(' · ')&&validBlindCompany(existing.split(' · ')[0]))return short(existing,60);
-    const raw=short(rawNick,60),pair=raw.split(/\s*·\s*/);
-    const prefix=pair.length>1?validBlindCompany(pair[0]):'';
-    const forced=validBlindCompany(company);
-    const seed=String(residentId||raw||uid());
-    // A new fictional company is selected only when Gemini supplies no real
-    // fictional-company affiliation. The same residentId always gets the same fallback.
-    const companyName=forced||prefix||blindFictionalCompanies[hashLabel('company:'+seed)%blindFictionalCompanies.length];
-    let alias=pair.length>1?pair.slice(1).join(' '):raw;
-    const rpNames=[data?.settings?.savedProfiles?.user?.name,
-      ...safeArray(data?.settings?.savedProfiles?.characters).map(p=>p.name)].filter(Boolean);
-    if(!alias||/^(익명|익명직장인|익명직원|익명 주민|직장인|회사원|사용자|닉네임)$/i.test(alias)||
-      rpNames.includes(alias)||alias===companyName)
-      alias=blindAliasWords[hashLabel('alias:'+seed)%blindAliasWords.length];
-    return short(companyName+' · '+alias,60);
+    if(existing&&existing.includes(' · '))return short(existing,60);
+    const raw=short(rawNick,60),parts=raw.split(/\s*·\s*/);
+    const chosenCompany=validBlindCompany(company)||(parts.length>1?validBlindCompany(parts[0]):'')||'소속미확인';
+    let alias=parts.length>1?parts.slice(1).join(' · ').trim():raw;
+    const rpNames=[data?.settings?.savedProfiles?.user?.name,...safeArray(data?.settings?.savedProfiles?.characters).map(p=>p.name)].filter(Boolean);
+    if(!alias||rpNames.includes(alias)||alias===chosenCompany)alias='익명';
+    return short(chosenCompany+' · '+alias,60);
+  }
+  function blindUserIdentityPrompt(){
+    const settings=data.settings,selected=profileSelection();
+    return [
+      'Create the Blind USER nickname: company affiliation and creative anonymous alias. Use ONLY the provided user profile, character profiles, world and instructions; never RP chat, history or posts.',
+      'A company may be assigned to the user ONLY if the user employer is explicit. A job title, specialty, department, technology or other unrelated organization is NOT an employer. Never invent the user employer.',
+      'If no employer is established, return company as empty string. Invent a distinct anonymous alias; do not use real user/character names. Return ONLY JSON {"company":"confirmed employer or empty string","alias":"anonymous nickname"}.',
+      '[유저 프로필] '+JSON.stringify({text:short(settings.profiles.user,5000),selected:selected.user}),
+      '[캐릭터 프로필] '+JSON.stringify(short(settings.profiles.characters,9000)),
+      '[세계관] '+JSON.stringify(short(settings.profiles.world,6500)),
+      '[지침] '+JSON.stringify({general:short(settings.guide,5000),blind:short(settings.communityGuides?.blind||'',5000)})
+    ].join('\n');
   }
   // Platform-specific identity normalization for EVERY AI post/comment/reply.
   // Keep a single identity per residentId inside each board and do not reveal RP names.
@@ -1370,8 +1357,8 @@
     if(!nick||genericPlatformNames.test(nick)||isRpRealName(nick))nick=platformAlias('office',seed);
     if(/(?:팀\/부서명|부서명|팀명).{0,12}[·ㆍ].{0,12}(?:별명|닉네임)/.test(rule)&&!nick.includes(' · '))
       nick=(user?userOfficeDepartment():'부서미상')+' · '+nick;
-    if(/(?:회사명|기업명).{0,12}[·ㆍ].{0,12}(?:별명|닉네임)/.test(rule)&&!nick.includes(' · '))
-      nick=(user?userBlindCompany():blindFictionalCompanies[hashLabel('company:'+seed)%blindFictionalCompanies.length])+' · '+nick;
+    if(/(?:회사명|기업명).{0,12}[·ㆍ].{0,12}(?:별명|닉네임)/.test(rule)&&!nick.includes(' · ')&&currentCommunity().id==='blind')
+      nick=(user&&currentBoard().userBlindIdentityReady?currentBoard().userBlindNickname.split(' · ')[0]:'소속미확인')+' · '+nick;
     return short(nick,60);
   }
   function communityNick(rawNick,residentId,company,characterKey=''){
@@ -1497,8 +1484,27 @@
           if(chosen&&!manualBoardTitle(request.community)&&!validatedBoardTitle(board.generatedTitle,request.community)){board.generatedTitle=chosen;saved();}
         }catch(err){if(request.cancelled)return;console.warn('[제타 익명 게시판] 게시판 이름 생성 실패:',err);}
       }
+      if(kind==='manual'&&request.community==='blind'&&!board.userBlindIdentityReady){
+        try{
+          const identityBody={contents:[{role:'user',parts:[{text:blindUserIdentityPrompt()}]}],generationConfig:{temperature:0.5,responseMimeType:'application/json',maxOutputTokens:256}};
+          const identity=parseGemini(await generateWithFallback(key,model,identityBody,request));
+          if(request.cancelled||busy!==request||request.room!==room||request.community!==data?.settings.selected||request.epoch!==runEpoch)return;
+          const company=validBlindCompany(identity.company);
+          const alias=short(identity.alias,40).replace(/\s*[·ㆍ]\s*/g,' ').trim();
+          const rpNames=[data?.settings?.savedProfiles?.user?.name,...safeArray(data?.settings?.savedProfiles?.characters).map(p=>p.name)].filter(Boolean);
+          if(alias&&!rpNames.includes(alias)){
+            board.userBlindNickname=short((company||'소속미확인')+' · '+alias,60);
+            board.userBlindIdentityReady=true;
+            saved();
+          }
+        }catch(err){if(request.cancelled)return;console.warn('[제타 익명 게시판] 블라인드 닉네임 생성 실패:',err);}
+      }
       const prompt=promptPayload(kind,post);const body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.9,responseMimeType:'application/json',maxOutputTokens:8192}};const res=await generateWithFallback(key,model,body,request);if(request.cancelled||busy!==request||request.room!==room||request.community!==data?.settings.selected||request.epoch!==runEpoch)return;const result=parseGemini(res);if(kind==='regenerate'&&batchToReplace&&board.lastBatch!==batchToReplace)throw Error('재생성 대상이 변경되었습니다.');const next=applyResult(result,kind,batchToReplace);if(kind==='manual'||kind==='auto'){turnCount=kind==='auto'?Math.max(0,turnCount-countedAtStart):0;autoStage='';if(kind==='manual'&&baselineReady){const complete=buildTurns(lastRawMessageSnapshot).filter(t=>!t.incomplete);completedTurnTotal=complete.length;const last=complete.at(-1);if(last){activeTurnKey=last.id;activeTurnHash=fingerprint(last);}}}if(kind==='regenerate'){next.temporary=batchToReplace?.temporary||false;saved();}succeeded=true;show('게시판 갱신 완료 · 새 게시글 '+next.created.length+'개');render();}
     catch(e){if(!request.cancelled)show('게시글 생성 실패: '+e.message);}finally{if(busy===request)busy=null;reactionTarget='';if(succeeded&&kind==='auto'&&turnCount>=data?.settings.turns&&data?.settings.auto&&!autoTimer&&activeTurnKey&&!request.cancelled)scheduleAuto(activeTurnKey,activeTurnHash);render();}
+  }
+  function boardBlindUserCompany(){
+    const b=currentBoard();
+    return b.userBlindIdentityReady?validBlindCompany(String(b.userBlindNickname||'').split(' · ')[0]):'';
   }
   function chooseNick(){
     const custom=String(data.settings.userNick||'').trim();
@@ -1510,7 +1516,7 @@
     if(data.settings.userNickMode==='custom'&&custom){
       if(type==='blind'){
         const pair=custom.split(/\s*·\s*/);
-        return pair.length>1&&validBlindCompany(pair[0])?short(custom,60):short(userBlindCompany()+' · '+custom,60);
+        return pair.length>1&&validBlindCompany(pair[0])?short(custom,60):short((boardBlindUserCompany()||'소속미확인')+' · '+custom,60);
       }
       if(type==='office'){
         const pair=custom.split(/\s*·\s*/);
@@ -1530,12 +1536,7 @@
       return userOfficeDepartment()+' · '+nickname.split(' · ').slice(1).join(' · ');
     }
     if(type==='blind'){
-      if(!board.userBlindNickname){
-        const seed=String(room||board.posts.length);
-        board.userBlindNickname=userBlindCompany()+' · '+blindAliasWords[hashLabel('user:'+seed)%blindAliasWords.length];
-        saved();
-      }
-      return board.userBlindNickname;
+      return board.userBlindIdentityReady&&board.userBlindNickname?board.userBlindNickname:'소속미확인 · 익명';
     }
     // Preserve each community's private user pseudonym across posts and reloads.
     if(!board.userCommunityNick||board.userCommunityNickType!==type){
