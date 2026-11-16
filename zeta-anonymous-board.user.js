@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.7.2
+// @version      0.8.0
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.7.2', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.8.0', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -66,6 +66,55 @@
       tx.onerror=()=>reject(tx.error||new Error('초기화 실패'));
       tx.onabort=()=>reject(tx.error||new Error('초기화 취소'));
     });
+  }
+  // Basic/API preferences are global. Board data and turn progress stay room-scoped.
+  const GLOBAL_PREF_KEY='zab-global-basic-api-v1';
+  const GLOBAL_PREF_FIELDS=['timeMode','auto','turns','autoDelaySeconds','posts','newComments','oldComments','oldPostWindow','quiet','model','fallback','temperature'];
+  function readGlobalPreferences(){
+    let stored={};
+    try{const v=GM_getValue(GLOBAL_PREF_KEY,{});stored=typeof v==='string'?JSON.parse(v):v;}catch{}
+    const def=defaults();if(!stored||typeof stored!=='object'||Array.isArray(stored))stored={};
+    const next={};
+    for(const key of GLOBAL_PREF_FIELDS)next[key]=Object.prototype.hasOwnProperty.call(stored,key)?stored[key]:def[key];
+    next.auto=!!next.auto;
+    next.turns=num(next.turns,1,999,def.turns);
+    next.autoDelaySeconds=num(next.autoDelaySeconds,1,300,def.autoDelaySeconds);
+    for(const [key,lo,hi] of [['posts',1,15],['newComments',0,30],['oldComments',0,100],['oldPostWindow',0,300]])
+      next[key]=num(next[key],lo,hi,def[key]);
+    if(!['real','rp'].includes(next.timeMode))next.timeMode=def.timeMode;
+    if(!['daily','skip','rumors'].includes(next.quiet))next.quiet=def.quiet;
+    next.model=short(next.model,100)||def.model;
+    next.fallback=short(next.fallback,100);
+    const temp=Number(next.temperature);
+    next.temperature=Number.isFinite(temp)?Math.max(0,Math.min(2,temp)):def.temperature;
+    return next;
+  }
+  let globalPreferences=readGlobalPreferences();
+  function applyGlobalPreferences(){
+    if(!data)return;
+    for(const key of GLOBAL_PREF_FIELDS)data.settings[key]=globalPreferences[key];
+  }
+  function persistGlobalPreferences(){
+    if(!data)return;
+    const next={...globalPreferences};
+    for(const key of GLOBAL_PREF_FIELDS)next[key]=data.settings[key];
+    try{GM_setValue(GLOBAL_PREF_KEY,next);}catch(e){show('공통 설정 저장 실패: '+String(e.message||e));return;}
+    globalPreferences=next;
+    applyGlobalPreferences();
+  }
+  function refreshGlobalPreferences(){
+    const next=readGlobalPreferences();
+    if(GLOBAL_PREF_FIELDS.some(key=>next[key]!==globalPreferences[key])){
+      const oldAuto=globalPreferences.auto,oldTurns=globalPreferences.turns,oldDelay=globalPreferences.autoDelaySeconds;
+      globalPreferences=next;
+      applyGlobalPreferences();
+      if(data&&(oldAuto!==next.auto||oldTurns!==next.turns||oldDelay!==next.autoDelaySeconds)){
+        invalidatePending('');runEpoch++;turnCount=0;
+        clearTimeout(autoTimer);autoTimer=null;clearTimeout(autoRetryTimer);autoRetryTimer=null;
+        pendingAutoCheck=null;autoWaitUntil=0;autoStage='';
+      }
+      render();
+    }
   }
   function blankRoom(id){return {room:id,settings:defaults(),boards:{},updatedAt:now()};}
   function blankBoard(){return {posts:[],residents:{},sort:'recent',started:false,seen:{},lastBatch:null,unread:0};}
@@ -309,7 +358,7 @@
   }
   installBridge();
   function bridge(action,requestId=''){window.postMessage({tag:'zab-control',channel:bridgeId,action,requestId},'*');}
-  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);clearTimeout(autoRetryTimer);autoRetryTimer=null;autoWaitUntil=0;autoStage='';pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];seenTurnIds=new Set();lastTurnTime=0;turnEvents=0;completedTurnTotal=null;lastTurnAnchor='';turnMessagesSeen=0;turnStatusError='';turnPages=0;turnLoading=false;turnLoadCount=0;baselineReady=false;independentProfileCollector.roomChanged();room=id;postsView='list';detailId='';profilePanelOpen=false;settingsOpen=false;settingTab='basic';profileSectionOpen=true;communityDraft=null;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='저장된 프로필 확인 중';profileRequestRoom='';profileCollectionActive=false;profileDraftSelection={userId:'',characterIds:[]};try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};migrateCommunityGuides(data.settings);data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};
+  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);clearTimeout(autoRetryTimer);autoRetryTimer=null;autoWaitUntil=0;autoStage='';pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];seenTurnIds=new Set();lastTurnTime=0;turnEvents=0;completedTurnTotal=null;lastTurnAnchor='';turnMessagesSeen=0;turnStatusError='';turnPages=0;turnLoading=false;turnLoadCount=0;baselineReady=false;independentProfileCollector.roomChanged();room=id;postsView='list';detailId='';profilePanelOpen=false;settingsOpen=false;settingTab='basic';profileSectionOpen=true;communityDraft=null;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='저장된 프로필 확인 중';profileRequestRoom='';profileCollectionActive=false;profileDraftSelection={userId:'',characterIds:[]};try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};globalPreferences=readGlobalPreferences();applyGlobalPreferences();migrateCommunityGuides(data.settings);data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};
     if(!data.settings.communityConfirmV043)data.settings.communityConfirmed=false;
     // Only a confirmed snapshot may be used after a reload. Old versions stored IDs
     // but not source content, so those users must import and save once.
@@ -940,7 +989,7 @@
     settings.communityGuides=guides;
     settings.communityGuidesMigrated=true;
   }
-  function saveSettings(){if(!data)return;data.settings.turns=num(data.settings.turns,1,999,1);data.settings.autoDelaySeconds=num(data.settings.autoDelaySeconds,1,300,10);saved();render();}
+  function saveSettings(globalChange=false){if(!data)return;data.settings.turns=num(data.settings.turns,1,999,1);data.settings.autoDelaySeconds=num(data.settings.autoDelaySeconds,1,300,10);if(globalChange)persistGlobalPreferences();saved();render();}
   function communityChange(id){if(!data)return;if(data.settings.selected===id)return;invalidatePending('커뮤니티를 변경했어요.');runEpoch++;turnCount=0;data.settings.selected=id;postsView='list';detailId='';saved();render();}
   // Only clicking "커뮤니티 설정 확인" commits preview values.
   function translationFor(id){const opts=data?.settings?.translationEnabled;return opts&&Object.prototype.hasOwnProperty.call(opts,id)?!!opts[id]:id==='reddit';}
@@ -1004,7 +1053,7 @@
     s.communityConfirmed=true;s.communityConfirmV043=true;
     communityDraft=null;saved();render();show('커뮤니티 설정을 저장했어요.');
   }
-  function toggleAuto(on){if(!data)return;invalidatePending('');runEpoch++;turnCount=0;data.settings.auto=on;saveSettings();show('자동 갱신 '+(on?'ON':'OFF')+' · 0턴부터 시작');}
+  function toggleAuto(on){if(!data)return;invalidatePending('');runEpoch++;turnCount=0;data.settings.auto=on;saveSettings(true);show('자동 갱신 '+(on?'ON':'OFF')+' · 0턴부터 시작');}
   function cancelBusy(reset=true){if(!busy)return;const b=busy;busy=null;b.cancelled=true;try{b.request?.abort?.();}catch{}if(reset)turnCount=0;renderStatus();}
   function getKey(){try{return String(GM_getValue('zab-gemini-key','')||'').trim();}catch{return'';}}
   function setKey(v){GM_setValue('zab-gemini-key',String(v||'').trim());}
@@ -1471,7 +1520,7 @@
       profileDraftSelection={userId:'',characterIds:[]};
       profileInfo='저장된 프로필 없음 · 불러오기 → 수정 → 저장';
       profilePanelOpen=false;settingsOpen=true;settingTab='data';
-      render();show('모든 채팅방의 게시판 데이터를 초기화했어요. API 키는 유지됩니다.');
+      render();show('모든 채팅방의 게시판 데이터를 초기화했어요. 공통 기본/API 설정은 유지됩니다.');
     }catch(e){show('전체 초기화 실패: '+e.message);}
   }
   // Track the comment/reply tree when a post is opened so later activity is unread.
@@ -1578,6 +1627,7 @@
   let themeMode='system';
   try{themeMode=String(GM_getValue('zab-theme-mode','system')||'system');}catch{}
   if(!['system','light','dark'].includes(themeMode))themeMode='system';
+  window.addEventListener('focus',refreshGlobalPreferences);
   function resolvedTheme(){return themeMode==='system'?(window.matchMedia?.('(prefers-color-scheme: dark)').matches?'dark':'light'):themeMode;}
   function applyTheme(){
     const mode=resolvedTheme(),id=data?.settings?.selected,customColor=safeArray(data?.settings?.custom).find(c=>c.id===id)?.color;const accent=settingsOpen||!data?.settings?.communityConfirmed?'#505969':/^#[0-9a-f]{6}$/i.test(customColor||'')?customColor:id==='neighborhood'&&mode==='dark'?'#388A69':communityColors[id]||'#505969';
@@ -1732,24 +1782,6 @@
   #zab-panel .zab-comment.zab-post-author-reply,#zab-panel .zab-reply.zab-post-author-reply{background:color-mix(in srgb,var(--zab-accent) 9%,var(--zab-surface));border-radius:9px}
   #zab-panel .zab-comment.zab-post-author-reply{padding:12px 10px}
   #zab-panel .zab-reply.zab-post-author-reply{padding:9px 10px}
-  /* v0.7.2: cover the entire reply gutter with the actual background.
-     The parent reply guide begins 16px after the comment edge, and its
-     2px border + 12px padding place reply content 30px from that edge. */
-  #zab-panel .zab-replies>.zab-reply.zab-post-author-reply{
-    position:relative;
-    margin-left:-30px!important;
-    width:calc(100% + 30px);
-    padding:9px 10px 9px 40px!important;
-    background:color-mix(in srgb,var(--zab-accent) 9%,var(--zab-surface));
-  }
-  /* Redraw the vertical guide over highlighted replies so it stays continuous. */
-  #zab-panel .zab-replies>.zab-reply.zab-post-author-reply::before{
-    content:"";position:absolute;left:16px;top:0;bottom:0;width:2px;
-    background:var(--zab-accent);pointer-events:none;
-  }
-  #zab-panel[data-theme="dark"] .zab-replies>.zab-reply.zab-post-author-reply{
-    background:color-mix(in srgb,var(--zab-accent) 17%,var(--zab-surface));
-  }
   #zab-panel[data-theme="dark"] .zab-comment.zab-post-author-reply,#zab-panel[data-theme="dark"] .zab-reply.zab-post-author-reply{background:color-mix(in srgb,var(--zab-accent) 17%,var(--zab-surface))}
 
   /* v0.5.8: subtle resize grip (keep touch target), right-aligned comment actions */
@@ -1900,7 +1932,7 @@
       <label>세계관 설정·배경</label>${ta('profiles.world',profiles.world||'',4)}
       <p class="zab-note">세계관 설명을 입력해도 필수 프로필 선택이 생략되지는 않아요.</p>`;
   }
-  function renderSettings(){const s=data.settings;return `${btn('settings-back','← 게시판으로')}<h3 style="margin:12px 0 8px">게시판 설정</h3><div class="zab-tabs">${tabs.map(([id,name])=>btn('tab:'+id,name,settingTab===id?'active':'')).join('')}</div><div class="zab-section zab-settings-section">${settingTab==='basic'?`<h4>테마</h4><label>화면 모드</label>${themeButtons()}<div class="zab-divider"></div><h4>기본 설정</h4><label><input type="checkbox" data-setting="auto" ${s.auto?'checked':''}> 자동 갱신 ON</label><label>자동 갱신 주기 (턴)</label>${inp('turns',s.turns,'number','min="1" max="999" step="1"')}<label>자동 생성 대기 시간 (초)</label>${inp('autoDelaySeconds',num(s.autoDelaySeconds,1,300,10),'number','min="1" max="300" step="1"')}<p class="zab-note">기본 대기 10초 · 설정 범위 1~300초 · 신규 턴 감지 후 대기</p><p class="zab-note">최초 수동 AI 생성 이후 자동 갱신됩니다. API 키와 유저·캐릭터 프로필 직접 선택이 필수예요.</p><p class="zab-note">${esc(profileSelectionStatus())}</p><div class="zab-divider"></div><h4>날짜·시간 설정</h4><label>게시글과 댓글에 표시할 시간 기준</label>${timeModeButtons()}<p class="zab-note">RP 시간은 가장 최근 턴의 코드블록/InfoBox 상태창에서 읽으며, 날짜 또는 시간만 있으면 확인된 항목만 표시합니다.</p><div class="zab-divider"></div><h4>AI 생성 설정</h4><label>새 게시글 수</label>${inp('posts',s.posts,'number','min="1" max="15"')}<label>새 게시글당 최대 댓글 수</label>${inp('newComments',s.newComments,'number','min="0" max="30"')}<label>기존 글 추가 댓글 전체 최대 개수</label>${inp('oldComments',s.oldComments,'number','min="0" max="100"')}<label>기존 댓글 추가 대상 최근 게시글 수</label>${inp('oldPostWindow',s.oldPostWindow,'number','min="0" max="300"')}<label>공개적으로 목격된 새 사건이 없을 때</label>${settingsSegment('quiet',[['daily','일상 게시글 생성'],['skip','게시글 생성 안 함'],['rumors','기존 소문 이어가기']],'공개적으로 목격된 새 사건이 없을 때')}`:
+  function renderSettings(){const s=data.settings;return `${btn('settings-back','← 게시판으로')}<h3 style="margin:12px 0 8px">게시판 설정</h3><div class="zab-tabs">${tabs.map(([id,name])=>btn('tab:'+id,name,settingTab===id?'active':'')).join('')}</div><div class="zab-section zab-settings-section">${settingTab==='basic'?`<h4>테마</h4><label>화면 모드</label>${themeButtons()}<div class="zab-divider"></div><h4>기본 설정</h4><p class="zab-note">기본 설정은 모든 채팅방에서 공유됩니다. 실제 턴 카운트와 자동 생성 진행 상태는 채팅방별로 유지됩니다.</p><label><input type="checkbox" data-setting="auto" ${s.auto?'checked':''}> 자동 갱신 ON</label><label>자동 갱신 주기 (턴)</label>${inp('turns',s.turns,'number','min="1" max="999" step="1"')}<label>자동 생성 대기 시간 (초)</label>${inp('autoDelaySeconds',num(s.autoDelaySeconds,1,300,10),'number','min="1" max="300" step="1"')}<p class="zab-note">기본 대기 10초 · 설정 범위 1~300초 · 신규 턴 감지 후 대기</p><p class="zab-note">최초 수동 AI 생성 이후 자동 갱신됩니다. API 키와 유저·캐릭터 프로필 직접 선택이 필수예요.</p><p class="zab-note">${esc(profileSelectionStatus())}</p><div class="zab-divider"></div><h4>날짜·시간 설정</h4><label>게시글과 댓글에 표시할 시간 기준</label>${timeModeButtons()}<p class="zab-note">RP 시간은 가장 최근 턴의 코드블록/InfoBox 상태창에서 읽으며, 날짜 또는 시간만 있으면 확인된 항목만 표시합니다.</p><div class="zab-divider"></div><h4>AI 생성 설정</h4><label>새 게시글 수</label>${inp('posts',s.posts,'number','min="1" max="15"')}<label>새 게시글당 최대 댓글 수</label>${inp('newComments',s.newComments,'number','min="0" max="30"')}<label>기존 글 추가 댓글 전체 최대 개수</label>${inp('oldComments',s.oldComments,'number','min="0" max="100"')}<label>기존 댓글 추가 대상 최근 게시글 수</label>${inp('oldPostWindow',s.oldPostWindow,'number','min="0" max="300"')}<label>공개적으로 목격된 새 사건이 없을 때</label>${settingsSegment('quiet',[['daily','일상 게시글 생성'],['skip','게시글 생성 안 함'],['rumors','기존 소문 이어가기']],'공개적으로 목격된 새 사건이 없을 때')}`:
   settingTab==='community'?`<h4>프로필/커뮤니티</h4>
   <div class="zab-flex"><strong>① 프로필 불러오기</strong>${btn('toggle-profile-section',profileSectionOpen?'접기':'펼치기')}</div>
   ${profileSectionOpen?renderProfilePanel():`<p class="zab-note">${esc(profileSelectionStatus())}</p>`}
@@ -1926,16 +1958,16 @@
   ${btn('confirm-community',communitySettingsConfirmed()?'커뮤니티 설정 확인됨':'커뮤니티 설정 확인',communitySettingsConfirmed()?'':'zab-primary')}
   ${s.custom.length?`<h4 style="margin-top:18px">사용자 지정 커뮤니티</h4>${s.custom.map(c=>`<div class="zab-flex zab-section"><span>${esc(c.name)}</span>${btn('edit-custom:'+c.id,'수정')}${btn('remove-custom:'+c.id,'삭제')}</div>`).join('')}`:''}`:
   settingTab==='people'?`<h4>내 닉네임</h4>${settingsSegment('userNickMode',[['auto','커뮤니티별 자동 부여'],['custom','직접 설정']],'내 닉네임 설정')}<label>직접 사용할 닉네임</label>${inp('userNick',s.userNick)}<p class="zab-note">자동 닉네임은 커뮤니티별 규칙에 맞춰 서로 구분되는 익명 별명을 적용합니다(블라인드 회사명 · 별명 / X @핸들 / Reddit u/핸들 / 에브리타임 익명번호). 직접 입력한 별명은 우선 적용되며 기존 글·댓글은 유지됩니다.</p><div class="zab-divider"></div><h4>고정 주민 닉네임 수정</h4>${Object.values(currentBoard().residents).length?Object.values(currentBoard().residents).map(r=>`<div class="zab-flex"><span style="font-size:11px;max-width:100px;overflow-wrap:anywhere">${esc(r.id)}</span><input data-resident="${esc(r.id)}" value="${esc(r.nick)}" maxlength="60"></div>`).join(''):'<p class="zab-note">아직 등장한 고정 주민이 없어요.</p>'}<p class="zab-note">수정한 이름은 새 활동부터 적용되고 과거 게시글 표시는 유지돼요.</p>`:
-  settingTab==='api'?`<h4>API 설정</h4><label>Gemini API 키</label><div class="zab-row"><input id="zab-api-key" type="password" placeholder="키 입력 후 저장" style="flex:1;min-width:100px" autocomplete="off">${btn('save-key','키 저장')}</div><p class="zab-note">키는 Tampermonkey 저장소에만 보관하며 JSON 백업에 포함하지 않아요.</p><label>Gemini 모델</label>${modelSelection()}<div class="zab-row">${btn('models','모델 목록 불러오기')}</div>`:
+  settingTab==='api'?`<h4>API 설정</h4><p class="zab-note">API 키와 모델 설정은 모든 채팅방에서 공유됩니다.</p><label>Gemini API 키</label><div class="zab-row"><input id="zab-api-key" type="password" placeholder="키 입력 후 저장" style="flex:1;min-width:100px" autocomplete="off">${btn('save-key','키 저장')}</div><p class="zab-note">키는 Tampermonkey 저장소에만 보관하며 JSON 백업에 포함하지 않아요.</p><label>Gemini 모델</label>${modelSelection()}<div class="zab-row">${btn('models','모델 목록 불러오기')}</div>`:
   `<h4>데이터 관리</h4><div class="zab-row">${btn('export','JSON 내보내기','zab-primary')}${btn('import','JSON 가져오기')}</div><input type="file" id="zab-import-file" accept="application/json,.json" hidden><p class="zab-note">가져오기할 때 덮어쓰기와 합치기 중 선택합니다. Gemini API 키는 제외됩니다.</p><div class="zab-divider"></div><h4>초기화</h4>
     <div class="zab-row">${btn('reset-community','현재 커뮤니티 초기화','zab-danger')}
     ${btn('reset-room-communities','현재 채팅방 초기화','zab-danger')}
     ${btn('reset-all-chatrooms','모든 채팅방 초기화','zab-danger')}</div>
     <p class="zab-note">현재 커뮤니티 초기화: 현재 채팅방의 선택한 커뮤니티 기록만 삭제합니다. 다른 커뮤니티와 설정은 유지됩니다.</p>
     <p class="zab-note">현재 채팅방 초기화: 현재 채팅방의 모든 커뮤니티 기록을 삭제합니다. 설정과 프로필은 유지됩니다.</p>
-    <p class="zab-note">모든 채팅방 초기화: 저장된 모든 채팅방의 게시판 데이터·설정·프로필을 삭제합니다.</p>
+    <p class="zab-note">모든 채팅방 초기화: 모든 채팅방의 게시판 데이터·채팅방별 설정·프로필을 삭제합니다. 공통 기본/API 설정은 유지됩니다.</p>
     <p class="zab-note"><b>세 가지 모두 Gemini API 키는 삭제하지 않습니다.</b> 삭제 전에 JSON 백업을 권장합니다.</p>`}</div>`;}
-  async function onClick(e){const b=e.target.closest('button[data-act]');if(!b){const card=e.target.closest('[data-open]');if(card){detailId=card.dataset.open;const board=currentBoard();if(!board.seen||typeof board.seen!=='object')board.seen={};markRead(detailId);postsView='detail';render();}return;}const a=b.dataset.act;if(a==='close'){panel.hidden=true;return;}if(a.startsWith('setting-segment:')){if(!data)return;const parts=a.slice('setting-segment:'.length).split(':');const name=parts[0],value=parts[1];const allowed=name==='quiet'?['daily','skip','rumors']:name==='userNickMode'?['auto','custom']:[];if(!allowed.includes(value))return;data.settings[name]=value;saveSettings();return;}if(a.startsWith('time-mode:')){if(!data)return;const mode=a.slice(10);if(!['real','rp'].includes(mode))return;data.settings.timeMode=mode;saveSettings();return;}if(a.startsWith('theme:')){const mode=a.slice(6);if(!['system','light','dark'].includes(mode))return;themeMode=mode;try{GM_setValue('zab-theme-mode',themeMode);}catch{}render();return;}if(a==='profiles-panel'||a==='setup-profile'){settingsOpen=true;if(!communityDraft)startCommunityDraft();profilePanelOpen=false;settingTab='community';profileSectionOpen=true;render();return;}if(a==='setup-community'||a==='pick-community'){settingsOpen=true;if(!communityDraft)startCommunityDraft();settingTab='community';profileSectionOpen=false;render();return;}if(a==='toggle-profile-section'){profileSectionOpen=!profileSectionOpen;render();return;}if(a==='confirm-community'){confirmCommunityDraft();return;}if(a.startsWith('choose-community:')){const id=a.slice('choose-community:'.length);if(id!=='__new_custom__'&&![...presets,...safeArray(data.settings.custom)].some(c=>c.id===id))return;selectCommunityDraft(id);return;}if(a==='settings'){profilePanelOpen=false;settingsOpen=!settingsOpen;if(settingsOpen)startCommunityDraft();else communityDraft=null;render();return;}if(a==='settings-back'){settingsOpen=false;communityDraft=null;render();return;}if(a.startsWith('tab:')){settingTab=a.slice(4);if(settingTab==='community'&&!communityDraft)startCommunityDraft();render();if(settingTab==='basic')updateProfileStatus();return;}if(a==='write'){postsView='write';render();return;}if(a==='back'){postsView='list';render();return;}if(a==='publish'){makeOwnPost(panel.querySelector('#zab-own-title')?.value||'',panel.querySelector('#zab-own-body')?.value||'');return;}if(a==='generate')return generate('manual');if(a==='regen')return generate('regenerate');if(a==='cancel'){cancelBusy();show('생성을 취소했어요. 0턴부터 시작합니다.');return;}if(a==='sort-recent'||a==='sort-popular'||a==='sort-unread'){currentBoard().sort=a==='sort-recent'?'recent':a==='sort-popular'?'popular':'unread';saved();render();return;}if(a.startsWith('like:')){const parts=a.slice(5).split(':');toggleLike(parts[0],parts[1]);return;}if(a==='translation-original'||a==='translation-ko'){currentBoard().translationView=a==='translation-ko'?'ko':'original';saved();render();return;}if(a==='delete')return deletePost(detailId);if(a==='send-comment'){addOwnComment(detailId,'',panel.querySelector('#zab-comment-text')?.value||'');return;}if(a.startsWith('reply:')){
+  async function onClick(e){const b=e.target.closest('button[data-act]');if(!b){const card=e.target.closest('[data-open]');if(card){detailId=card.dataset.open;const board=currentBoard();if(!board.seen||typeof board.seen!=='object')board.seen={};markRead(detailId);postsView='detail';render();}return;}const a=b.dataset.act;if(a==='close'){panel.hidden=true;return;}if(a.startsWith('setting-segment:')){if(!data)return;const parts=a.slice('setting-segment:'.length).split(':');const name=parts[0],value=parts[1];const allowed=name==='quiet'?['daily','skip','rumors']:name==='userNickMode'?['auto','custom']:[];if(!allowed.includes(value))return;data.settings[name]=value;saveSettings(name==='quiet');return;}if(a.startsWith('time-mode:')){if(!data)return;const mode=a.slice(10);if(!['real','rp'].includes(mode))return;data.settings.timeMode=mode;saveSettings(true);return;}if(a.startsWith('theme:')){const mode=a.slice(6);if(!['system','light','dark'].includes(mode))return;themeMode=mode;try{GM_setValue('zab-theme-mode',themeMode);}catch{}render();return;}if(a==='profiles-panel'||a==='setup-profile'){settingsOpen=true;if(!communityDraft)startCommunityDraft();profilePanelOpen=false;settingTab='community';profileSectionOpen=true;render();return;}if(a==='setup-community'||a==='pick-community'){settingsOpen=true;if(!communityDraft)startCommunityDraft();settingTab='community';profileSectionOpen=false;render();return;}if(a==='toggle-profile-section'){profileSectionOpen=!profileSectionOpen;render();return;}if(a==='confirm-community'){confirmCommunityDraft();return;}if(a.startsWith('choose-community:')){const id=a.slice('choose-community:'.length);if(id!=='__new_custom__'&&![...presets,...safeArray(data.settings.custom)].some(c=>c.id===id))return;selectCommunityDraft(id);return;}if(a==='settings'){profilePanelOpen=false;settingsOpen=!settingsOpen;if(settingsOpen)startCommunityDraft();else communityDraft=null;render();return;}if(a==='settings-back'){settingsOpen=false;communityDraft=null;render();return;}if(a.startsWith('tab:')){settingTab=a.slice(4);if(settingTab==='community'&&!communityDraft)startCommunityDraft();render();if(settingTab==='basic')updateProfileStatus();return;}if(a==='write'){postsView='write';render();return;}if(a==='back'){postsView='list';render();return;}if(a==='publish'){makeOwnPost(panel.querySelector('#zab-own-title')?.value||'',panel.querySelector('#zab-own-body')?.value||'');return;}if(a==='generate')return generate('manual');if(a==='regen')return generate('regenerate');if(a==='cancel'){cancelBusy();show('생성을 취소했어요. 0턴부터 시작합니다.');return;}if(a==='sort-recent'||a==='sort-popular'||a==='sort-unread'){currentBoard().sort=a==='sort-recent'?'recent':a==='sort-popular'?'popular':'unread';saved();render();return;}if(a.startsWith('like:')){const parts=a.slice(5).split(':');toggleLike(parts[0],parts[1]);return;}if(a==='translation-original'||a==='translation-ko'){currentBoard().translationView=a==='translation-ko'?'ko':'original';saved();render();return;}if(a==='delete')return deletePost(detailId);if(a==='send-comment'){addOwnComment(detailId,'',panel.querySelector('#zab-comment-text')?.value||'');return;}if(a.startsWith('reply:')){
     const parentId=a.slice(6);
     const areas=[...panel.querySelectorAll('[data-reply-parent]')];
     const area=areas.find(el=>el.dataset.replyParent===parentId);
@@ -1954,7 +1986,7 @@
     if(!area||area.dataset.replyParent!==parentId)return;
     addOwnComment(detailId,parentId,area.querySelector('textarea')?.value||'');
     return;
-  }if(a==='react'){return generate('react',currentBoard().posts.find(x=>x.id===detailId));}if(a==='save-key'){setKey(panel.querySelector('#zab-api-key')?.value||'');panel.querySelector('#zab-api-key').value='';show('API 키를 저장했어요.');return;}if(a==='models')return fetchModels();if(a==='check-model')return checkSelectedModel();if(a==='set-manual-model'){const id=String(panel.querySelector('#zab-manual-model')?.value||'').trim().replace(/^models\//,'');if(!/^[a-zA-Z0-9._-]{3,100}$/.test(id))return show('올바른 Gemini 모델 ID를 입력하세요.');data.settings.model=id;saveSettings();return show('모델을 '+id+'로 설정했어요.');}if(a==='refresh-profiles'){requestProfiles();return;}if(a==='select-all-characters'||a==='clear-all-characters'){profileDraftSelection.characterIds=a==='select-all-characters'?profileCache.characters.map(profileKey):[];render();return;}if(a==='save-profiles'){saveProfileDraft();return;}if(a==='discard-profiles'){discardProfileDraft();return;}if(a.startsWith('edit-custom:')){const id=a.slice(12),c=data.settings.custom.find(x=>x.id===id);if(!c)return;const name=prompt('커뮤니티 이름',c.name);if(name===null)return;const desc=prompt('커뮤니티 설명·분위기',c.desc);if(desc===null)return;const nick=prompt('닉네임 형식',c.nick);if(nick===null)return;const style=prompt('말투 지침',c.style);if(style===null)return;const color=prompt('강조색 HEX (예: #505969)',c.color||'#505969');if(color===null)return;if(!/^#[0-9a-f]{6}$/i.test(color))return show('강조색은 #RRGGBB 형식으로 입력해 주세요.');Object.assign(c,{name:short(name,80)||c.name,desc:short(desc,2000),nick:short(nick,400),style:short(style,2000),color});saveSettings();return;}if(a.startsWith('remove-custom:')){const id=a.slice(14);if(!confirm('커뮤니티 설정을 삭제할까요? 기록도 삭제하려면 데이터 관리에서 먼저 초기화해 주세요.'))return;data.settings.custom=data.settings.custom.filter(x=>x.id!==id);if(data.settings.selected===id)communityChange('everytime');saveSettings();return;}if(a==='reset-community')return resetCommunity();if(a==='reset-room-communities')return resetRoomCommunities();if(a==='reset-all-chatrooms')return resetAllChatRooms();if(a==='export')return exportJSON();if(a==='import')return panel.querySelector('#zab-import-file')?.click();}
+  }if(a==='react'){return generate('react',currentBoard().posts.find(x=>x.id===detailId));}if(a==='save-key'){setKey(panel.querySelector('#zab-api-key')?.value||'');panel.querySelector('#zab-api-key').value='';show('API 키를 저장했어요.');return;}if(a==='models')return fetchModels();if(a==='check-model')return checkSelectedModel();if(a==='set-manual-model'){const id=String(panel.querySelector('#zab-manual-model')?.value||'').trim().replace(/^models\//,'');if(!/^[a-zA-Z0-9._-]{3,100}$/.test(id))return show('올바른 Gemini 모델 ID를 입력하세요.');data.settings.model=id;saveSettings(true);return show('모델을 '+id+'로 설정했어요.');}if(a==='refresh-profiles'){requestProfiles();return;}if(a==='select-all-characters'||a==='clear-all-characters'){profileDraftSelection.characterIds=a==='select-all-characters'?profileCache.characters.map(profileKey):[];render();return;}if(a==='save-profiles'){saveProfileDraft();return;}if(a==='discard-profiles'){discardProfileDraft();return;}if(a.startsWith('edit-custom:')){const id=a.slice(12),c=data.settings.custom.find(x=>x.id===id);if(!c)return;const name=prompt('커뮤니티 이름',c.name);if(name===null)return;const desc=prompt('커뮤니티 설명·분위기',c.desc);if(desc===null)return;const nick=prompt('닉네임 형식',c.nick);if(nick===null)return;const style=prompt('말투 지침',c.style);if(style===null)return;const color=prompt('강조색 HEX (예: #505969)',c.color||'#505969');if(color===null)return;if(!/^#[0-9a-f]{6}$/i.test(color))return show('강조색은 #RRGGBB 형식으로 입력해 주세요.');Object.assign(c,{name:short(name,80)||c.name,desc:short(desc,2000),nick:short(nick,400),style:short(style,2000),color});saveSettings();return;}if(a.startsWith('remove-custom:')){const id=a.slice(14);if(!confirm('커뮤니티 설정을 삭제할까요? 기록도 삭제하려면 데이터 관리에서 먼저 초기화해 주세요.'))return;data.settings.custom=data.settings.custom.filter(x=>x.id!==id);if(data.settings.selected===id)communityChange('everytime');saveSettings();return;}if(a==='reset-community')return resetCommunity();if(a==='reset-room-communities')return resetRoomCommunities();if(a==='reset-all-chatrooms')return resetAllChatRooms();if(a==='export')return exportJSON();if(a==='import')return panel.querySelector('#zab-import-file')?.click();}
   function onInput(e){const el=e.target;
     if(el.id==='zab-own-body'){resizeOwnBody(el);return;}
     if(el.dataset.profileEdit){
@@ -1973,7 +2005,7 @@
       else{const id=el.dataset.profileCharacter;const ids=new Set(safeArray(previous.characterIds));if(el.checked)ids.add(id);else ids.delete(id);previous.characterIds=[...ids];}
       profileDraftSelection=previous;render();return;
     }
-    if(el.dataset.topTitle==='yes'){data.settings.topTitles=data.settings.topTitles&&typeof data.settings.topTitles==='object'?data.settings.topTitles:{};const v=short(el.value,100);if(v)data.settings.topTitles[data.settings.selected]=v;else delete data.settings.topTitles[data.settings.selected];saveSettings();return;}if(el.dataset.communityTitle==='yes'){if(!communityDraft)startCommunityDraft();communityDraft.title=short(el.value,100);refreshCommunityConfirmButton();return;}if(el.dataset.communityTranslate==='yes'){if(!communityDraft)startCommunityDraft();communityDraft.translate=!!el.checked;refreshCommunityConfirmButton();return;}const name=el.dataset.setting;if(!name)return;const s=data.settings,v=el.type==='checkbox'?el.checked:el.value;if(name==='auto')return toggleAuto(v);if(name==='translation-toggle'){s.translationEnabled=s.translationEnabled&&typeof s.translationEnabled==='object'?s.translationEnabled:{};s.translationEnabled[s.selected]=!!v;return saveSettings();}if(name==='ui-theme'){themeMode=['system','light','dark'].includes(v)?v:'system';try{GM_setValue('zab-theme-mode',themeMode);}catch{}render();return;}if(name==='selected')return selectCommunityDraft(v);if(name.startsWith('profiles.')){s.profiles[name.slice(9)]=short(v,20000);}else if(['turns','autoDelaySeconds','posts','newComments','oldComments','oldPostWindow'].includes(name)){const limits={turns:[1,999],autoDelaySeconds:[1,300],posts:[1,15],newComments:[0,30],oldComments:[0,100],oldPostWindow:[0,300]};s[name]=num(v,...limits[name],defaults()[name]);if(name==='turns'){runEpoch++;clearTimeout(autoTimer);turnCount=0;}if(name==='autoDelaySeconds'){clearTimeout(autoTimer);autoTimer=null;clearTimeout(autoRetryTimer);autoRetryTimer=null;pendingAutoCheck=null;autoWaitUntil=0;autoStage='';if(s.auto&&currentBoard().started&&turnCount>=s.turns&&activeTurnKey&&!busy)scheduleAuto(activeTurnKey,activeTurnHash);}}else s[name]=v;saveSettings();}
+    if(el.dataset.topTitle==='yes'){data.settings.topTitles=data.settings.topTitles&&typeof data.settings.topTitles==='object'?data.settings.topTitles:{};const v=short(el.value,100);if(v)data.settings.topTitles[data.settings.selected]=v;else delete data.settings.topTitles[data.settings.selected];saveSettings();return;}if(el.dataset.communityTitle==='yes'){if(!communityDraft)startCommunityDraft();communityDraft.title=short(el.value,100);refreshCommunityConfirmButton();return;}if(el.dataset.communityTranslate==='yes'){if(!communityDraft)startCommunityDraft();communityDraft.translate=!!el.checked;refreshCommunityConfirmButton();return;}const name=el.dataset.setting;if(!name)return;const s=data.settings,v=el.type==='checkbox'?el.checked:el.value;if(name==='auto')return toggleAuto(v);if(name==='translation-toggle'){s.translationEnabled=s.translationEnabled&&typeof s.translationEnabled==='object'?s.translationEnabled:{};s.translationEnabled[s.selected]=!!v;return saveSettings();}if(name==='ui-theme'){themeMode=['system','light','dark'].includes(v)?v:'system';try{GM_setValue('zab-theme-mode',themeMode);}catch{}render();return;}if(name==='selected')return selectCommunityDraft(v);if(name.startsWith('profiles.')){s.profiles[name.slice(9)]=short(v,20000);}else if(['turns','autoDelaySeconds','posts','newComments','oldComments','oldPostWindow'].includes(name)){const limits={turns:[1,999],autoDelaySeconds:[1,300],posts:[1,15],newComments:[0,30],oldComments:[0,100],oldPostWindow:[0,300]};s[name]=num(v,...limits[name],defaults()[name]);if(name==='turns'){runEpoch++;clearTimeout(autoTimer);turnCount=0;}if(name==='autoDelaySeconds'){clearTimeout(autoTimer);autoTimer=null;clearTimeout(autoRetryTimer);autoRetryTimer=null;pendingAutoCheck=null;autoWaitUntil=0;autoStage='';if(s.auto&&currentBoard().started&&turnCount>=s.turns&&activeTurnKey&&!busy)scheduleAuto(activeTurnKey,activeTurnHash);}}else s[name]=v;saveSettings(GLOBAL_PREF_FIELDS.includes(name));}
   function exportJSON(){if(!data)return;const payload={format:'zeta-anonymous-board',version:VERSION,exportedAt:new Date().toISOString(),room:data.room,settings:copy(data.settings),boards:copy(data.boards)};delete payload.settings.apiKey;const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json;charset=utf-8'});const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='zeta-anonymous-board-'+data.room.slice(0,8)+'-'+new Date().toISOString().slice(0,10)+'.json';document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),45000);show('JSON 백업 다운로드를 요청했어요.');}
   async function importJSON(file){if(file.size>25*1024*1024)return show('25MB를 넘는 파일은 가져올 수 없어요.');let obj;try{obj=JSON.parse(await file.text());}catch{return show('JSON 파일을 해석할 수 없어요.');}if(obj?.format!=='zeta-anonymous-board'||!obj.room||!obj.boards||typeof obj.boards!=='object'||Array.isArray(obj.boards)||!obj.settings)return show('제타 익명 게시판 백업 형식이 아니에요.');if(obj.room!==room&&!confirm('백업의 채팅방 ID가 현재 방과 달라요. 현재 방에 복원할까요?'))return;const choice=prompt('복원 방식 선택: 1 = 덮어쓰기, 2 = 합치기','2');if(!['1','2'].includes(choice))return;const before=copy(data);try{migrateCommunityGuides(obj.settings);if(choice==='1'){data.settings={...defaults(),...obj.settings,selected:obj.settings.selected||'everytime'};data.settings.profileSelection={userId:String(obj.settings.profileSelection?.userId||''),characterIds:safeArray(obj.settings.profileSelection?.characterIds).map(String)};data.boards=copy(obj.boards);}else{for(const [id,src] of Object.entries(obj.boards)){if(!src||!Array.isArray(src.posts))continue;const target=data.boards[id]||(data.boards[id]=blankBoard());const ids=new Map(target.posts.map(p=>[p.id,p]));for(const p of src.posts){if(!p?.id||!Array.isArray(p.comments))continue;if(!ids.has(p.id)){target.posts.push(p);ids.set(p.id,p);}else{const existing=ids.get(p.id);if(existing.title!==p.title||existing.body!==p.body){if(confirm('중복 게시글 내용이 달라요. 백업 내용으로 덮어쓸까요?\n'+p.title))Object.assign(existing,p);}else{const comments=new Set(existing.comments.map(x=>x.id));for(const c of p.comments)if(c.id&&!comments.has(c.id)){existing.comments.push(c);comments.add(c.id);}}}}target.residents={...safeObj(src.residents),...safeObj(target.residents)};target.started=target.started||src.started||target.posts.length>0;}
       if(!data.settings.savedProfiles&&obj.settings.savedProfiles?.user)data.settings.savedProfiles=copy(obj.settings.savedProfiles);for(const c of safeArray(obj.settings.custom)){if(!data.settings.custom.some(x=>x.id===c.id))data.settings.custom.push(c);}data.settings.communityGuides=data.settings.communityGuides&&typeof data.settings.communityGuides==='object'?data.settings.communityGuides:{};for(const [id,guide] of Object.entries(obj.settings.communityGuides||{})){if(!Object.prototype.hasOwnProperty.call(data.settings.communityGuides,id)&&typeof guide==='string')data.settings.communityGuides[id]=guide;}}
@@ -1983,7 +2015,7 @@
       profileCollectionActive=false;
       profileCache=snap?.user?{users:[copy(snap.user)],characters:copy(safeArray(snap.characters)),plot:null}:{users:[],characters:[],plot:null};
       profileDraftSelection=snap?.user?{userId:profileKey(snap.user),characterIds:safeArray(snap.characters).map(profileKey)}:{userId:'',characterIds:[]};
-      await writeRoom(data);show('백업 복원이 완료됐어요.');settingsOpen=false;render();}catch(e){data=before;show('복원 실패: '+e.message);}}
+      applyGlobalPreferences();await writeRoom(data);show('백업 복원이 완료됐어요.');settingsOpen=false;render();}catch(e){data=before;show('복원 실패: '+e.message);}}
   const safeObj=x=>x&&typeof x==='object'&&!Array.isArray(x)?x:{};
   window.addEventListener('resize',applySize);
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',mount,{once:true});else mount();
