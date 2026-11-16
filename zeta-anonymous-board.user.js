@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.5.2
+// @version      0.5.3
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.5.2', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.5.3', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1392,7 +1392,7 @@
   function stats(c){return {views:c.views||0,likes:c.likes||0,comments:c.comments.reduce((n,x)=>n+1+x.replies.length,0)};}
   function sortedPosts(){const b=currentBoard();const posts=b.sort==='unread'?b.posts.filter(needsReview):b.posts;return [...posts].sort((a,z)=>b.sort==='recent'||b.sort==='unread'?z.time-a.time:((z.likes*5+stats(z).comments*3+z.views/20)/(1+Math.max(0,(now()-z.time)/86400000)*.1))-((a.likes*5+stats(a).comments*3+a.views/20)/(1+Math.max(0,(now()-a.time)/86400000)*.1)));}
   function renderStatus(){if(!panel)return;const el=panel.querySelector('#zab-status');if(el){const phase=autoStage==='waiting'?' · 생성 대기 중':autoStage==='verifying'?' · 최신 대화 확인 중':autoStage==='retry'?' · 조회 재시도 중':autoStage==='failed'?' · 조회 실패':'';el.textContent=busy?'게시글 생성 중…':now()<noticeUntil?notice:data?'자동 '+(data.settings.auto?'ON':'OFF')+' · '+turnCount+'/'+data.settings.turns+'턴'+(completedTurnTotal!==null?' · 전체 '+completedTurnTotal+'턴':(turnStatusError?' · 조회 오류: '+short(turnStatusError,85):turnLoading?' · 대화 수집 '+turnPages+'페이지 / '+turnLoadCount+'개':' · 대화 확인 중'))+(data.settings.auto&&!currentBoard().started?' · 첫 수동 생성 필요':data.settings.auto&&!profileReady()?' · 프로필 선택 필요':phase):'채팅방 연결 대기 중';}const count=launcher?.querySelector('.zab-unread');if(count)count.textContent=data?.boards?.[data.settings.selected]?.unread?'●':'';const cancel=panel.querySelector('#zab-cancel');if(cancel)cancel.hidden=!busy;}
-  const communityColors={everytime:'#E65360',blind:'#C84350',reddit:'#FF4500',x:'#505969',office:'#426A9A',neighborhood:'#388A69',gallery:'#3654A5'};
+  const communityColors={everytime:'#E65360',blind:'#EB4034',reddit:'#FF4500',x:'#505969',office:'#426A9A',neighborhood:'#388A69',gallery:'#3654A5'};
   let themeMode='system';
   try{themeMode=String(GM_getValue('zab-theme-mode','system')||'system');}catch{}
   if(!['system','light','dark'].includes(themeMode))themeMode='system';
@@ -1485,6 +1485,18 @@
   #zab-panel .zab-author-me,#zab-panel[data-theme="dark"] .zab-author-me{background:var(--zab-accent);color:#fff}
   #zab-panel .zab-author-character,#zab-panel[data-theme="dark"] .zab-author-character{background:color-mix(in srgb,var(--zab-accent) 15%,var(--zab-surface));color:var(--zab-text);border:1px solid color-mix(in srgb,var(--zab-accent) 36%,var(--zab-border))}
   @media(max-width:380px){#zab-panel .zab-profile-actions button{padding:6px 9px;font-size:11px}#zab-panel button.zab-setup-card{padding:11px}#zab-panel .zab-setup-symbol{min-width:35px;height:35px}}
+
+  /* v0.5.3: true white light surface, deeper dark theme, consistent badges and continuous reply thread */
+  #zab-launch,#zab-panel{--zab-bg:#FFFFFF;--zab-surface:#FFFFFF;--zab-surface2:#F7F7F8;--zab-text:#202124;--zab-muted:#737780;--zab-border:#E9EAED}
+  #zab-launch[data-theme="dark"],#zab-panel[data-theme="dark"]{--zab-bg:#0C0C0E;--zab-surface:#141416;--zab-surface2:#202023;--zab-text:#F2F2F4;--zab-muted:#9B9CA3;--zab-border:#2A2A2F}
+  #zab-panel .zab-content{background:var(--zab-bg)}
+  #zab-panel .zab-head,#zab-panel .zab-footer{background:var(--zab-surface)}
+  #zab-panel .zab-translate-switch{justify-content:flex-start}
+  #zab-panel .zab-replies{border-left:2px solid var(--zab-accent);margin:8px 0 0 16px;padding:0 0 0 12px}
+  #zab-panel .zab-replies>.zab-reply{border:0!important;margin:0 0 12px 0;padding:0;min-width:0}
+  #zab-panel .zab-replies>.zab-reply:last-child{margin-bottom:0}
+  #zab-panel .zab-author-me,#zab-panel .zab-author-character,#zab-panel[data-theme="dark"] .zab-author-me,#zab-panel[data-theme="dark"] .zab-author-character{background:color-mix(in srgb,var(--zab-accent) 15%,var(--zab-surface));color:var(--zab-text);border:0;padding:2px 6px}
+  #zab-panel .zab-author-me-name,#zab-panel .zab-author-character-name{color:var(--zab-text)}
   `;document.documentElement.appendChild(style);launcher=document.createElement('button');launcher.type='button';launcher.id='zab-launch';launcher.innerHTML='익명 게시판 <span class="zab-unread"></span>';panel=document.createElement('section');panel.id='zab-panel';panel.hidden=true;panel.innerHTML='<div class="zab-head" id="zab-drag"><strong id="zab-community-title">익명 게시판</strong><button data-act="settings" aria-label="설정" title="설정">⚙️</button><button data-act="close" aria-label="닫기" title="닫기">×</button></div><div class="zab-content" id="zab-main"></div><div class="zab-footer"><span class="zab-status" id="zab-status">채팅방 연결 대기 중</span><button id="zab-cancel" data-act="cancel" hidden>생성 취소</button></div><div class="zab-resize" id="zab-resize">◢</div>';
     document.body.append(launcher,panel);launcher.addEventListener('click',()=>{if(launcher.dataset.dragging==='yes'){launcher.dataset.dragging='';return;}panel.hidden=!panel.hidden;if(!panel.hidden){const b=currentBoard();b.unread=0;saved();render();applySize();}});
     try{window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',applyTheme);}catch{}
@@ -1538,7 +1550,7 @@
   function likeControl(postId,item){
     return `<button type="button" class="zab-like-inline${item.likedByMe?' is-liked':''}" data-act="like:${esc(postId)}:${esc(item.id)}" aria-label="좋아요 ${num(item.likes,0,99999999,0)}개" aria-pressed="${item.likedByMe?'true':'false'}"><span aria-hidden="true">${item.likedByMe?'♥':'♡'}</span><span>${num(item.likes,0,99999999,0)}</span></button>`;
   }
-  function renderDetail(){const p=currentBoard().posts.find(x=>x.id===detailId);if(!p){postsView='list';return renderList();}const comments=p.comments.map(c=>`<div class="zab-comment"><div><b>${communityAuthorName(c,p)}</b> <span class="zab-meta">${esc(rpTimeText(c))}</span></div><p style="margin:4px 0">${esc(translatedText(c,'text'))}</p><div class="zab-comment-actions">${likeControl(p.id,c)}${btn('reply:'+c.id,'답글','zab-text-action',`data-post="${esc(p.id)}"`)}</div><div class="zab-inline-reply" data-reply-parent="${esc(c.id)}"></div>${c.replies.map(r=>`<div class="zab-reply"><b>${communityAuthorName(r,p)}</b> <span class="zab-meta">${esc(rpTimeText(r))}</span><p style="margin:4px 0">${esc(translatedText(r,'text'))}</p><div class="zab-comment-actions">${likeControl(p.id,r)}${btn('reply:'+c.id,'답글','zab-text-action',`data-post="${esc(p.id)}"`)}</div></div>`).join('')}</div>`).join('');return `<div class="zab-flex">${btn('back','← 목록')} <div>${btn('react','AI 반응 생성','zab-primary')}${btn('delete','게시글 삭제','zab-danger','')}</div></div>${translationToggle()}<div class="zab-section"><span class="zab-meta">${communityAuthorName(p,p)} · ${esc(rpTimeText(p))}</span><h2 style="margin:10px 0;font-size:17px">${esc(translatedText(p,'title'))}</h2><p>${esc(translatedText(p,'body'))}</p><div class="zab-engagement">${likeControl(p.id,p)}<span class="zab-meta">댓글 ${stats(p).comments} · 조회 ${p.views}</span></div></div><div class="zab-section"><b>댓글 ${stats(p).comments}</b>${comments||'<p class="zab-note">아직 댓글이 없어요.</p>'}</div><label>댓글 작성</label><textarea id="zab-comment-text" rows="2" placeholder="댓글 입력"></textarea>${btn('send-comment','댓글 등록','zab-primary')}`;}
+  function renderDetail(){const p=currentBoard().posts.find(x=>x.id===detailId);if(!p){postsView='list';return renderList();}const comments=p.comments.map(c=>`<div class="zab-comment"><div><b>${communityAuthorName(c,p)}</b> <span class="zab-meta">${esc(rpTimeText(c))}</span></div><p style="margin:4px 0">${esc(translatedText(c,'text'))}</p><div class="zab-comment-actions">${likeControl(p.id,c)}${btn('reply:'+c.id,'답글','zab-text-action',`data-post="${esc(p.id)}"`)}</div><div class="zab-inline-reply" data-reply-parent="${esc(c.id)}"></div>${c.replies.length?`<div class="zab-replies">${c.replies.map(r=>`<div class="zab-reply"><b>${communityAuthorName(r,p)}</b> <span class="zab-meta">${esc(rpTimeText(r))}</span><p style="margin:4px 0">${esc(translatedText(r,'text'))}</p><div class="zab-comment-actions">${likeControl(p.id,r)}${btn('reply:'+c.id,'답글','zab-text-action',`data-post="${esc(p.id)}"`)}</div></div>`).join('')}</div>`:''} </div>`).join('');return `<div class="zab-flex">${btn('back','← 목록')} <div>${btn('react','AI 반응 생성','zab-primary')}${btn('delete','게시글 삭제','zab-danger','')}</div></div>${translationToggle()}<div class="zab-section"><span class="zab-meta">${communityAuthorName(p,p)} · ${esc(rpTimeText(p))}</span><h2 style="margin:10px 0;font-size:17px">${esc(translatedText(p,'title'))}</h2><p>${esc(translatedText(p,'body'))}</p><div class="zab-engagement">${likeControl(p.id,p)}<span class="zab-meta">댓글 ${stats(p).comments} · 조회 ${p.views}</span></div></div><div class="zab-section"><b>댓글 ${stats(p).comments}</b>${comments||'<p class="zab-note">아직 댓글이 없어요.</p>'}</div><label>댓글 작성</label><textarea id="zab-comment-text" rows="2" placeholder="댓글 입력"></textarea>${btn('send-comment','댓글 등록','zab-primary')}`;}
   function renderWrite(){return `${btn('back','← 목록')}<h3>게시글 작성</h3><label>제목</label><input id="zab-own-title" maxlength="180" placeholder="제목"><label>본문</label><textarea id="zab-own-body" rows="8" placeholder="게시글 내용"></textarea><div class="zab-toolbar">${btn('publish','게시글 등록','zab-primary')}${btn('back','취소')}</div><p class="zab-note">직접 작성한 글은 RP 리롤과 AI 다시 생성으로 삭제되지 않아요.</p>`;}
   function renderProfilePanel(){
     const profiles=data?.settings?.profiles||{};
