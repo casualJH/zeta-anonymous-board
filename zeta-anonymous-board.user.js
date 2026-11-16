@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.5.5
+// @version      0.5.6
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.5.5', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.5.6', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1497,7 +1497,9 @@
   #zab-panel .zab-replies{border-left:2px solid var(--zab-accent);margin:8px 0 0 16px;padding:0 0 0 12px}
   #zab-panel .zab-replies>.zab-reply{border:0!important;margin:0 0 12px 0;padding:0;min-width:0}
   #zab-panel .zab-replies>.zab-reply:last-child{margin-bottom:0}
-  #zab-panel .zab-author-me,#zab-panel .zab-author-character,#zab-panel[data-theme="dark"] .zab-author-me,#zab-panel[data-theme="dark"] .zab-author-character{background:color-mix(in srgb,var(--zab-accent) 15%,var(--zab-surface));color:var(--zab-text);border:0;padding:2px 6px}
+  #zab-panel .zab-author-me,#zab-panel .zab-author-character,#zab-panel[data-theme="dark"] .zab-author-me,#zab-panel[data-theme="dark"] .zab-author-character{color:var(--zab-text);border:0;padding:2px 6px}
+  #zab-panel .zab-author-me,#zab-panel[data-theme="dark"] .zab-author-me{background:color-mix(in srgb,var(--zab-accent) 40%,var(--zab-surface))}
+  #zab-panel .zab-author-character,#zab-panel[data-theme="dark"] .zab-author-character{background:color-mix(in srgb,var(--zab-accent) 25%,var(--zab-surface))}
   #zab-panel .zab-author-me-name,#zab-panel .zab-author-character-name{color:var(--zab-text)}
 
   /* v0.5.4 theme switch shares the low-contrast original/translation design */
