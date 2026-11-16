@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.5.8
+// @version      0.5.9
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.5.8', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.5.9', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1636,7 +1636,7 @@
     const alreadyOpen=!!area.querySelector('textarea');
     for(const el of areas)el.replaceChildren();
     if(alreadyOpen)return;
-    area.innerHTML=`<label>대댓글 작성</label><textarea class="zab-reply-text" rows="2" placeholder="답글 입력"></textarea><div class="zab-row zab-reply-submit"><button type="button" data-act="send-reply:${esc(parentId)}" class="zab-primary">등록</button><button type="button" data-act="cancel-reply">취소</button></div>`;
+    area.innerHTML=`<label>대댓글 작성</label><textarea class="zab-reply-text" rows="2" placeholder="답글 입력"></textarea><div class="zab-row zab-reply-submit"><button type="button" data-act="cancel-reply">취소</button><button type="button" data-act="send-reply:${esc(parentId)}" class="zab-primary">등록</button></div>`;
     area.querySelector('textarea')?.focus();
     return;
   }
