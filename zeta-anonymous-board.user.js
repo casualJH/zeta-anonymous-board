@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.9.16
+// @version      0.9.17
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.9.16', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.9.17', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1104,8 +1104,8 @@
     const cfg=data.settings,com=currentCommunity(),profiles=profileSelection();
     const formats={
       everytime:'Read the user profile, character profiles, world setting and instructions carefully. If an explicitly established university is found (e.g. "아스란 대학교 3학년" means the university name is "아스란 대학교"), return ONLY its full university name INCLUDING the word "대학교" (e.g. "아스란 대학교"), without academic year, department, or "자유게시판". Do not invent or guess any school. If no university name is confirmed, return an empty string in boardTitle. The script will append " 자유게시판".',
-      gallery:'Invent a natural Korean DC Inside-style gallery TOPIC based on the world and profiles, not a character name. Return ONLY the topic without " 갤러리"; e.g. 해외 축구, 대학생.',
-      neighborhood:'Invent a natural Korean neighborhood-based NAVER CAFE name, not just a place name. Freely choose the cafe name; "천호동 · 동네 이야기" is just one possible format. Do not claim an unconfirmed real neighborhood exists. The name must sound like a local residents cafe (neighborhood, neighbors, residents, village, apartment, local moms, local chat or community).',
+      gallery:'Create a natural Korean DC Inside-style gallery TOPIC inclusive of both the user and all selected characters, preserving Korean gallery naming style. Prefer a confirmed common parent affiliation, then genuinely shared interests, activities or living environment, then a broad established world topic. Do not use only the user\'s occupation (e.g. veterinarian) or only some characters\' species as the whole gallery topic when other participants are excluded. Do not invent a shared relationship such as the veterinarian treating those characters. Prefer a broad world topic over an invented connection. Return ONLY the topic without " 갤러리"; e.g. 해외 축구, 대학생.',
+      neighborhood:'Invent a natural Korean neighborhood-based NAVER CAFE name for a shared space of the user and all selected characters, not just a place name. Prefer a confirmed common location or living environment; otherwise choose an inclusive broad local-life theme rather than inventing a shared address or focusing on one participant\'s occupation, nationality, species or hobby. Freely choose the cafe name; "천호동 · 동네 이야기" is just one possible format, not a location to assume. Do not claim an unconfirmed real neighborhood exists. The name must sound like a local residents cafe (neighborhood, neighbors, residents, village, apartment, local moms, local chat or community).',
       reddit:'Create a natural English subreddit TOPIC/name that inclusively represents the USER and ALL SELECTED CHARACTERS, based ONLY on the supplied saved profiles, world setting and instructions. Choose the theme in this strict priority: (1) a confirmed COMMON PARENT AFFILIATION such as the same university, employer, school or organization, even when individual departments, majors, professions or nationalities differ; (2) if no common parent affiliation exists, a genuinely shared interest, professional field or activity (e.g. a Korean entertainer and a Russian actor may share the entertainment industry without implying they know or work with each other); (3) if neither exists, a broad topic representing the overall established world setting. Prefer the most inclusive confirmed commonality, not a detail unique to the user or one character. Never make up a shared affiliation, relationship or activity to manufacture a theme. A shared university UCM with a media major and a sports major should yield a university-wide concept such as UCMStudents, NOT UCMMedia. Express the concept as a concise natural English subreddit name. Return ONLY 3-21 ASCII letters, digits or underscores; the script adds r/. Never use character or user real names.',
       office:'Return ONLY the company or organization name that is explicitly established in the world/profiles/instructions, without inventing one. If unavailable, return empty boardTitle.',
       blind:'Return empty boardTitle. This community always uses the fixed title "토픽·블라블라".',
@@ -1115,6 +1115,8 @@
       'Determine the board name exclusively from USER PROFILE, CHARACTER PROFILES, WORLD SETTING and INSTRUCTIONS below.',
       'Never use RP dialogue, chat history, scene events, existing posts, rumors or resident activity. These are not supplied to you.',
       'Do not name a community after any user or character, even if their name is prominent. Do not make a fan community.',
+      'COMMON COMMUNITY OWNERSHIP PRINCIPLE: These communities are spaces shared by the USER AND ALL SELECTED CHARACTERS, not a personal community of any one participant. For freely generated community names/topics, prioritize (1) a confirmed common parent affiliation such as school, employer or organization; (2) genuinely shared interests, activities, occupational field or living environment; (3) a broad theme of the established world when neither commonality exists. Different majors, occupations, nationalities or species can still share a broader confirmed theme. Do not choose a topic belonging only to the user or only some characters, force an unconfirmed connection, or invent common affiliations, relationships or activities. Keep every platform\'s native naming style and mandatory constraints.',
+      'MANDATORY PLATFORM EXCEPTIONS: Everytime must use an explicitly confirmed university name only or return empty, office must use an explicitly confirmed company or organization name only or return empty, while Blind and X have fixed board titles. Do not invent an institution merely to satisfy shared-topic naming.',
       'Platform-specific mandatory rule: '+(formats[com.id]||'Create a natural board name suited to this custom community description.'),
       'Return exactly one JSON object {"boardTitle":"..."} and nothing else.'
     ].join('\n');
