@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.9.6
+// @version      0.9.7
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.9.6', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.9.7', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -394,7 +394,7 @@
     profileWaitTimer=setTimeout(()=>{
       if(attempt!==profileAttempt||room!==forRoom)return;
       const count=profileCache.characters.length+profileCache.users.length;
-      endProfileLoading(count?'확인 완료 · 수집된 프로필 '+count+'개 (추가 응답 없음)':'채팅방 목록으로 돌아갔다가, 해당 채팅방에 다시 들어와 주세요.');
+      endProfileLoading(count?'확인 완료 · 수집된 프로필 '+count+'개 (추가 응답 없음)':'프로필을 불러오지 못했다면 아래 방법 중 하나를 시도해 주세요.\n- 채팅방 목록으로 나갔다가 다시 들어오기\n- 채팅창 상단의 플롯명을 눌렀다가 채팅창으로 돌아오기');
     },10000);
     independentProfileCollector.refresh();
   }
@@ -429,7 +429,7 @@
   function communityBoardTitle(){
     const id=currentCommunity().id;
     const manual=short(data?.settings?.boardTitles?.[id],100);
-    if(manual)return manual;
+    if(manual&&!(id==='office'&&/^r\//i.test(manual)))return manual;
     if(id==='blind')return '토픽·블라블라';
     if(id==='x')return '타임라인';
     const generated=validatedBoardTitle(currentBoard().generatedTitle,id);
@@ -863,7 +863,7 @@
       const startRoom=room,epoch=generation,token=++requestSeq;
       if(!Object.keys(auth).some(k=>k==='authorization')){
         // Existing Zeta calls can still be observed without explicit credentials.
-        endProfileLoading('채팅방 목록으로 돌아갔다가, 해당 채팅방에 다시 들어와 주세요.');
+        endProfileLoading('프로필을 불러오지 못했다면 아래 방법 중 하나를 시도해 주세요.\n- 채팅방 목록으로 나갔다가 다시 들어오기\n- 채팅창 상단의 플롯명을 눌렀다가 채팅창으로 돌아오기');
         pendingRefresh=false;return;
       }
       const aborts=[];
@@ -1174,6 +1174,8 @@
       return short(university+' 자유게시판',100);
     }
     if(communityId==='office'){
+      // Reject old Reddit-style titles persisted by earlier builds.
+      if(/^r\//i.test(title)||/^(?:officeworkers?|officeculture|workplace|companytalk)$/i.test(title))return '';
       const evidence=[...worldTitleTexts(),String(data?.settings?.guide||''),String(data?.settings?.communityGuides?.office||'')].join('\n').toLowerCase();
       if(!evidence.includes(title.toLowerCase()))return '';
       return title;
@@ -1786,6 +1788,7 @@
   #zab-panel .zab-profile-load-actions button{margin:0}
   #zab-panel .zab-profile-status-lines{margin:4px 0 10px;line-height:1.5}
   #zab-panel .zab-profile-status-lines span{display:block}
+  #zab-panel #zab-profile-status{white-space:pre-line}
   #zab-panel .zab-settings-section h4.zab-main-settings-heading{font-size:15px;font-weight:700;line-height:1.4;margin:4px 0 12px}
   #zab-panel .zab-settings-section .zab-divider:has(+ .zab-main-settings-heading){margin:20px 0 16px}
   #zab-panel .zab-setting-segment{gap:4px}
