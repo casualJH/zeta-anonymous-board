@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.5.9
+// @version      0.5.10
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.5.9', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.5.10', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1529,6 +1529,15 @@
   #zab-panel .zab-comment-submit{display:flex;justify-content:flex-end;align-items:center;margin:8px 0 0}
   #zab-panel .zab-reply-submit{display:flex;justify-content:flex-end;align-items:center;gap:7px;margin:8px 0 5px}
   #zab-panel .zab-comment-submit button,#zab-panel .zab-reply-submit button{flex:0 0 auto}
+
+  /* v0.5.10: light active-sort tint, pencil write button, subtle card metrics */
+  #zab-panel .zab-list-heading .zab-sort-switch button.is-active{background:color-mix(in srgb,var(--zab-accent) 10%,var(--zab-surface));color:var(--zab-text)}
+  #zab-panel .zab-toolbar button.zab-write-button{display:inline-flex;align-items:center;justify-content:center;gap:6px;background:var(--zab-accent);border-color:var(--zab-accent);color:#fff}
+  #zab-panel .zab-ui-icon{flex:0 0 auto;display:inline-block;vertical-align:middle;width:15px;height:15px}
+  #zab-panel .zab-write-button .zab-ui-icon{width:15px;height:15px}
+  #zab-panel .zab-card-metrics{display:flex;align-items:center;gap:13px;flex-wrap:wrap;margin-top:4px}
+  #zab-panel .zab-card-metric{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;color:var(--zab-muted);font-size:11px;line-height:1.5}
+  #zab-panel .zab-card-metric.is-liked{color:var(--zab-accent)}
   `;document.documentElement.appendChild(style);launcher=document.createElement('button');launcher.type='button';launcher.id='zab-launch';launcher.innerHTML='익명 게시판 <span class="zab-unread"></span>';panel=document.createElement('section');panel.id='zab-panel';panel.hidden=true;panel.innerHTML='<div class="zab-head" id="zab-drag"><strong id="zab-community-title">익명 게시판</strong><button data-act="settings" aria-label="설정" title="설정">⚙️</button><button data-act="close" aria-label="닫기" title="닫기">×</button></div><div class="zab-content" id="zab-main"></div><div class="zab-footer"><span class="zab-status" id="zab-status">채팅방 연결 대기 중</span><button id="zab-cancel" data-act="cancel" hidden>생성 취소</button></div><div class="zab-resize" id="zab-resize">◢</div>';
     document.body.append(launcher,panel);launcher.addEventListener('click',()=>{if(launcher.dataset.dragging==='yes'){launcher.dataset.dragging='';return;}panel.hidden=!panel.hidden;if(!panel.hidden){const b=currentBoard();b.unread=0;saved();render();applySize();}});
     try{window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',applyTheme);}catch{}
@@ -1575,10 +1584,26 @@
     if(currentCommunity().id!=='everytime'||!post)return authorName(item);
     return authorName({...item,nick:everytimeNames(post).get(item.id)||'익명'});
   }
+  function boardIcon(name){
+    const paths={
+      pen:'<path d="M12 19h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L9 17l-4 1 1-4Z"/>',
+      eye:'<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>',
+      heart:'<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78L12 21.23l8.84-8.84a5.5 5.5 0 0 0 0-7.78Z"/>',
+      message:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5Z"/>'
+    };
+    return '<svg class="zab-ui-icon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(paths[name]||'')+'</svg>';
+  }
+  function boardListMetrics(p){
+    return '<div class="zab-card-metrics zab-meta">'+
+      '<span class="zab-card-metric">'+boardIcon('eye')+'<span>조회 '+p.views.toLocaleString()+'</span></span>'+
+      '<span class="zab-card-metric'+(p.likedByMe?' is-liked':'')+'">'+boardIcon('heart')+'<span>'+p.likes.toLocaleString()+'</span></span>'+
+      '<span class="zab-card-metric">'+boardIcon('message')+'<span>댓글 '+stats(p).comments+'</span></span>'+
+    '</div>';
+  }
   function renderList(){const b=currentBoard(),com=currentCommunity();return `${setupGuide()}<div class="zab-board-hero"><div><strong class="zab-board-name">${esc(communityBoardTitle())}</strong><div class="zab-note">${esc(short(com.id==='gallery'?(data.settings.galleryDescription||com.desc):com.desc,95))}</div></div><button class="zab-my-button" data-act="profiles-panel" aria-label="My: 프로필/커뮤니티 설정" title="My: 프로필/커뮤니티 설정">My</button></div>
-    <div class="zab-toolbar">${btn('write','글쓰기')}${btn('generate','수동 생성','zab-primary')}${btn('regen','다시 생성','',!b.lastBatch?'disabled':'')}</div>
+    <div class="zab-toolbar"><button type="button" data-act="write" class="zab-write-button zab-primary">${boardIcon('pen')}<span>글쓰기</span></button>${btn('generate','수동 생성','zab-primary')}${btn('regen','다시 생성','',!b.lastBatch?'disabled':'')}</div>
     <div class="zab-flex zab-list-heading"><b>전체 게시글 ${b.posts.length}</b><div class="zab-sort-switch" role="group" aria-label="게시글 정렬">${btn('sort-recent','최신순',b.sort==='recent'?'is-active':'')}${btn('sort-popular','인기순',b.sort==='popular'?'is-active':'')}${btn('sort-unread','미확인',b.sort==='unread'?'is-active':'')}</div></div>
-    ${translationToggle()}${!b.posts.length?'<div class="zab-section" style="text-align:center;padding:40px 10px;color:#888">게시글이 없어요.<br>수동 생성 버튼으로 첫 게시글을 만들어 보세요.</div>':b.sort==='unread'&&!sortedPosts().length?'<div class="zab-section" style="text-align:center;padding:40px 10px;color:#888">미확인 게시글이 없어요.</div>':sortedPosts().map(p=>`<div class="zab-card" data-open="${esc(p.id)}"><h3>${needsReview(p)?'<span class="zab-chip">NEW</span> ':''}${esc(translatedText(p,'title'))}</h3><div class="excerpt">${esc(short(translatedText(p,'body'),150))}</div><div class="zab-meta">${communityAuthorName(p,p)} · ${esc(rpTimeText(p))}</div><div class="zab-meta">조회 ${p.views.toLocaleString()} · 좋아요 ${p.likes.toLocaleString()} · 댓글 ${stats(p).comments}</div></div>`).join('')}`;}
+    ${translationToggle()}${!b.posts.length?'<div class="zab-section" style="text-align:center;padding:40px 10px;color:#888">게시글이 없어요.<br>수동 생성 버튼으로 첫 게시글을 만들어 보세요.</div>':b.sort==='unread'&&!sortedPosts().length?'<div class="zab-section" style="text-align:center;padding:40px 10px;color:#888">미확인 게시글이 없어요.</div>':sortedPosts().map(p=>`<div class="zab-card" data-open="${esc(p.id)}"><h3>${needsReview(p)?'<span class="zab-chip">NEW</span> ':''}${esc(translatedText(p,'title'))}</h3><div class="excerpt">${esc(short(translatedText(p,'body'),150))}</div><div class="zab-meta">${communityAuthorName(p,p)} · ${esc(rpTimeText(p))}</div>${boardListMetrics(p)}</div>`).join('')}`;}
   function likeControl(postId,item){
     return `<button type="button" class="zab-like-inline${item.likedByMe?' is-liked':''}" data-act="like:${esc(postId)}:${esc(item.id)}" aria-label="좋아요 ${num(item.likes,0,99999999,0)}개" aria-pressed="${item.likedByMe?'true':'false'}"><span aria-hidden="true">${item.likedByMe?'♥':'♡'}</span><span>${num(item.likes,0,99999999,0)}</span></button>`;
   }
