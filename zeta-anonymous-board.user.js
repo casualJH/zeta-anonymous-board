@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.9.0
+// @version      0.9.1
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.9.0', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.9.1', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1731,16 +1731,16 @@
   #zab-panel .zab-section > .zab-comment:last-child{border-bottom:0}
   #zab-panel .zab-reply{border-left-color:var(--zab-accent);margin-left:12px;padding-left:12px}
   #zab-panel .zab-chip{background:var(--zab-surface2);color:var(--zab-accent);border-radius:6px;font-weight:700}
-  #zab-panel .zab-footer{background:var(--zab-surface);border-color:var(--zab-border);padding:9px 12px}
+  #zab-panel .zab-footer{background:var(--zab-surface);border-color:var(--zab-border);padding:5px 10px;min-height:29px;gap:6px}
   #zab-panel .zab-status{color:var(--zab-muted)}
   #zab-panel .zab-footer-status{display:flex;align-items:center;gap:5px;flex:1;min-width:0}
-  #zab-panel .zab-footer-status .zab-status{min-width:0;overflow-wrap:anywhere}
-  #zab-panel button#zab-auto-toggle{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:23px;height:23px;padding:3px;border:0;border-radius:5px;background:transparent;color:var(--zab-muted);box-shadow:none;cursor:pointer;touch-action:manipulation}
-  #zab-panel button#zab-auto-toggle .zab-ui-icon{width:16px;height:16px}
-  #zab-panel button#zab-auto-toggle[data-enabled="on"]{color:var(--zab-accent)}
+  #zab-panel .zab-footer-status .zab-status{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #zab-panel button#zab-auto-toggle{flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;min-height:18px;padding:1px;border:0;border-radius:4px;background:transparent;color:var(--zab-muted);box-shadow:none;cursor:pointer;touch-action:manipulation}
+  #zab-panel button#zab-auto-toggle .zab-ui-icon{width:15px;height:15px}
   #zab-panel button#zab-auto-toggle:hover{background:var(--zab-surface2)}
   #zab-panel button#zab-auto-toggle:focus-visible{outline:2px solid var(--zab-accent);outline-offset:1px}
   #zab-panel button#zab-auto-toggle:disabled{opacity:.45;cursor:default}
+  #zab-panel .zab-footer #zab-cancel{padding:3px 7px;min-height:24px;flex:0 0 auto}
   #zab-panel .zab-resize{color:var(--zab-muted)}
   #zab-panel .zab-toolbar{gap:8px;flex-wrap:wrap}
   #zab-panel .zab-toolbar button{min-width:0;white-space:normal}
