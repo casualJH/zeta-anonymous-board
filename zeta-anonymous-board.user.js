@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.10.1
+// @version      0.10.2
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.10.1', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.10.2', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -443,7 +443,7 @@
     if(generated)return generated;
     if(id==='everytime')return '자유게시판';
     if(id==='gallery')return '갤러리';
-    if(id==='office')return '회사 · 익명 게시판';
+    if(id==='office')return '조직·직업 익명 게시판';
     if(id==='reddit')return 'r/CasualConversation';
     if(id==='neighborhood')return '우리동네 수다방';
     return currentCommunity().name;
@@ -1170,19 +1170,23 @@
     }
     if(communityId==='office'){
       if(/^(?:officeworkers?|officeculture|workplace|companytalk)$/i.test(title)||/^(?:회사|기업|직장|사무실|조직|우리 회사)$/i.test(title))return '';
-      // Unnamed occupational/community boards do not assert a concrete employer.
-      // Gemini chooses the actual words; JavaScript only validates the generic form.
-      const genericOfficeTopic=/^(?:소방관|소방직|소방|군인|군생활|경찰관|경찰|의료진|의료인|의료|간호사|의사|공무원|교직원|교사|교육계|직장인|직업인|직업군|근무자|현장직|일터|업무생활|직장생활|공공안전|안전직|공공기관직원|공무직|직장인들|사회생활|직업생활|직장인들의\s*일상)\s*익명\s*게시판$/;
+      // Gemini chooses the name. Only validate the format and whether a specific
+      // organization was really mentioned; do not require UI suffixes in profiles.
+      const genericOfficeTopic=/^(?:소방관|소방직|소방|군인|군생활|경찰관|경찰|의료진|의료인|의료|간호사|의사|공무원|교직원|교사|교육계|직장인|직업인|직업군|근무자|현장직|일터|업무생활|직장생활|공공안전|안전직|공공기관직원|공무직|직장인들|사회생활|직업생활|직장인들의\s*일상|조직[·\\s]*직업)\s*익명\s*게시판$/;
       if(genericOfficeTopic.test(title))return title;
-      const sources=[...worldTitleTexts(),String(data?.settings?.guide||''),String(data?.settings?.communityGuides?.office||'')];
+      // e.g. "블랙팀 익명 게시판" -> "블랙팀"; "블랙팀 내부 게시판" -> "블랙팀".
+      const organization=title.replace(/\s*(?:(?:내부\s*)?익명\s*게시판|내부\s*게시판|게시판)$/,'').trim();
+      if(!organization||organization===title&&/게시판$/.test(title))return '';
       const clean=value=>String(value||'').normalize('NFKC').toLowerCase().replace(/[\s·ㆍ._-]+/g,'');
-      const target=clean(title);
-      // Specific organizations still require explicit grounding in the saved world/profile.
-      const organizationContext=/(?:회사명|회사|기업명|기업|소속|근무처|근무지|재직|직장|직원|사원|고용주|부대|사단|여단|연대|대대|중대|소대|사령부|군부대|소방서|소방본부|119안전센터|경찰서|지구대|파출소|병원|의료원|학교|기관|조직|station|unit|battalion|brigade|regiment|hospital|department|organization|company|employer|employed|works?\s+at)/i;
-      const grounded=sources.some(source=>String(source||'').split(/[\n.!?。！？;]+/).some(segment=>{
-        if(!clean(segment).includes(target))return false;
-        return organizationContext.test(segment);
-      }));
+      const target=clean(organization);
+      if(target.length<2)return '';
+      const sources=[...worldTitleTexts(),String(data?.settings?.guide||''),String(data?.settings?.communityGuides?.office||'')];
+      // Requires a contextual organization mention, not merely a similar word
+      // or a profession. The overall shared affiliation is still Gemini's decision.
+      const organizationContext=/(?:회사명|회사|기업명|기업|소속|근무처|근무지|재직|직장|직원|사원|고용주|부대|사단|여단|연대|대대|중대|소대|사령부|군부대|소방서|소방본부|119안전센터|경찰서|지구대|파출소|병원|의료원|학교|기관|조직|작전팀|특수임무|팀장|station|unit|battalion|brigade|regiment|hospital|department|organization|company|employer|employed|works?\s+at)/i;
+      const grounded=sources.some(source=>String(source||'').split(/[\n.!?。！？;]+/).some(segment=>
+        clean(segment).includes(target)&&organizationContext.test(segment)
+      ));
       return grounded?title:'';
     }
     if(communityId==='gallery'){
