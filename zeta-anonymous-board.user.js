@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.5.13
+// @version      0.5.14
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.5.13', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.5.14', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1540,19 +1540,19 @@
   #zab-panel .zab-card-metric.is-liked{color:var(--zab-accent)}
 
   /* v0.5.12: flexible, image-inspired compose card with bottom-right actions */
-  #zab-panel #zab-main[data-view="write"]{display:flex;flex-direction:column;height:100%;min-height:100%;overflow-y:auto}
-  #zab-panel .zab-write-screen{display:flex;flex-direction:column;flex:1 0 auto;min-height:100%;gap:11px}
-  #zab-panel .zab-write-card{display:flex;flex-direction:column;flex:1 1 auto;min-height:285px;padding:15px;border:1px solid var(--zab-border);border-radius:14px;background:var(--zab-surface)}
+  #zab-panel #zab-main[data-view="write"]{display:block;height:100%;min-height:0;overflow-y:auto}
+  #zab-panel .zab-write-screen{display:flex;flex-direction:column;min-height:0;gap:11px}
+  #zab-panel .zab-write-card{display:flex;flex-direction:column;flex:0 0 auto;min-height:0;padding:15px;border:1px solid var(--zab-border);border-radius:14px;background:var(--zab-surface)}
   #zab-panel .zab-write-card h3{font-size:16px;font-weight:750;margin:0 0 18px}
   #zab-panel .zab-write-card label{font-size:12px;font-weight:700;margin:10px 0 6px}
   #zab-panel .zab-write-card .zab-required{color:#D95360;font-weight:800}
   #zab-panel .zab-write-card input#zab-own-title{flex:0 0 auto}
-  #zab-panel .zab-write-card textarea#zab-own-body{display:block;flex:1 1 auto;min-height:120px;height:auto;resize:vertical}
+  #zab-panel .zab-write-card textarea#zab-own-body{display:block;flex:0 0 auto;min-height:112px;height:112px;max-height:none;resize:none;box-sizing:border-box}
   #zab-panel .zab-write-actions{display:flex;justify-content:flex-end;align-items:center;gap:8px;flex:0 0 auto;padding:0 2px 4px}
   #zab-panel .zab-write-actions button{flex:0 0 auto;min-height:35px;padding:8px 13px}
   #zab-panel .zab-write-actions button[data-act="back"]{background:var(--zab-surface2);border-color:transparent}
   #zab-panel .zab-write-actions button[data-act="publish"]{background:var(--zab-accent);border-color:var(--zab-accent);color:#fff}
-  @media(max-height:520px){#zab-panel .zab-write-card{min-height:235px}#zab-panel .zab-write-card h3{margin-bottom:8px}}
+  @media(max-height:520px){#zab-panel .zab-write-card h3{margin-bottom:8px}}
   `;document.documentElement.appendChild(style);launcher=document.createElement('button');launcher.type='button';launcher.id='zab-launch';launcher.innerHTML='익명 게시판 <span class="zab-unread"></span>';panel=document.createElement('section');panel.id='zab-panel';panel.hidden=true;panel.innerHTML='<div class="zab-head" id="zab-drag"><strong id="zab-community-title">익명 게시판</strong><button data-act="settings" aria-label="설정" title="설정">⚙️</button><button data-act="close" aria-label="닫기" title="닫기">×</button></div><div class="zab-content" id="zab-main"></div><div class="zab-footer"><span class="zab-status" id="zab-status">채팅방 연결 대기 중</span><button id="zab-cancel" data-act="cancel" hidden>생성 취소</button></div><div class="zab-resize" id="zab-resize">◢</div>';
     document.body.append(launcher,panel);launcher.addEventListener('click',()=>{if(launcher.dataset.dragging==='yes'){launcher.dataset.dragging='';return;}panel.hidden=!panel.hidden;if(!panel.hidden){const b=currentBoard();b.unread=0;saved();render();applySize();}});
     try{window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',applyTheme);}catch{}
@@ -1568,7 +1568,17 @@
     if(!data||profileReady()&&data.settings.communityConfirmed)return '';
     return `<button type="button" class="zab-setup-card" data-act="setup-profile" title="프로필/커뮤니티 설정 열기" aria-label="프로필 불러오기와 커뮤니티 설정 열기"><span class="zab-setup-symbol" aria-hidden="true">My</span><span class="zab-setup-body"><strong>게시판 시작 설정</strong><span>My 버튼을 눌러 프로필 불러오기 + 커뮤니티 설정하기</span></span><span class="zab-setup-chevron" aria-hidden="true">›</span></button>`;
   }
-  function render(){if(!panel)return;applyTheme();renderStatus();const title=panel.querySelector('#zab-community-title');if(title)title.textContent=data?.settings?.communityConfirmed?currentCommunity().name:'익명 게시판';const node=panel.querySelector('#zab-main');if(!node)return;if(!data){node.innerHTML='<p>제타 채팅방을 열고 메시지가 로드되면 연결됩니다.</p>';return;}node.dataset.view=!settingsOpen&&postsView==='write'?'write':'other';node.innerHTML=settingsOpen?renderSettings():postsView==='detail'?renderDetail():postsView==='write'?renderWrite():renderList();}
+  function resizeOwnBody(el){
+    if(!el||el.id!=='zab-own-body')return;
+    el.style.height='auto';
+    const area=panel?.querySelector('#zab-main');
+    const available=area?.clientHeight||window.innerHeight;
+    const max=Math.max(112,Math.floor(available*.64));
+    const desired=Math.max(112,el.scrollHeight);
+    el.style.height=Math.min(desired,max)+'px';
+    el.style.overflowY=desired>max?'auto':'hidden';
+  }
+  function render(){if(!panel)return;applyTheme();renderStatus();const title=panel.querySelector('#zab-community-title');if(title)title.textContent=data?.settings?.communityConfirmed?currentCommunity().name:'익명 게시판';const node=panel.querySelector('#zab-main');if(!node)return;if(!data){node.innerHTML='<p>제타 채팅방을 열고 메시지가 로드되면 연결됩니다.</p>';return;}node.dataset.view=!settingsOpen&&postsView==='write'?'write':'other';node.innerHTML=settingsOpen?renderSettings():postsView==='detail'?renderDetail():postsView==='write'?renderWrite():renderList();if(node.dataset.view==='write')resizeOwnBody(node.querySelector('#zab-own-body'));}
   // Each Everytime post has its own numbering. The author is '익명'
   // on the post and '글쓴이' in replies, with no board-wide number registry.
   function everytimeIdentity(item){
@@ -1623,7 +1633,7 @@
     return `<button type="button" class="zab-like-inline${item.likedByMe?' is-liked':''}" data-act="like:${esc(postId)}:${esc(item.id)}" aria-label="좋아요 ${num(item.likes,0,99999999,0)}개" aria-pressed="${item.likedByMe?'true':'false'}"><span aria-hidden="true">${item.likedByMe?'♥':'♡'}</span><span>${num(item.likes,0,99999999,0)}</span></button>`;
   }
   function renderDetail(){const p=currentBoard().posts.find(x=>x.id===detailId);if(!p){postsView='list';return renderList();}const comments=p.comments.map(c=>`<div class="zab-comment"><div><b>${communityAuthorName(c,p)}</b> <span class="zab-meta">${esc(rpTimeText(c))}</span></div><p style="margin:4px 0">${esc(translatedText(c,'text'))}</p><div class="zab-comment-actions">${likeControl(p.id,c)}${btn('reply:'+c.id,'답글','zab-text-action',`data-post="${esc(p.id)}"`)}</div><div class="zab-inline-reply" data-reply-parent="${esc(c.id)}"></div>${c.replies.length?`<div class="zab-replies">${c.replies.map(r=>`<div class="zab-reply"><b>${communityAuthorName(r,p)}</b> <span class="zab-meta">${esc(rpTimeText(r))}</span><p style="margin:4px 0">${esc(translatedText(r,'text'))}</p><div class="zab-comment-actions">${likeControl(p.id,r)}${btn('reply:'+c.id,'답글','zab-text-action',`data-post="${esc(p.id)}"`)}</div></div>`).join('')}</div>`:''} </div>`).join('');return `<div class="zab-flex">${btn('back','← 목록')} <div>${btn('react','AI 반응 생성','zab-primary')}${btn('delete','게시글 삭제','zab-danger','')}</div></div>${translationToggle()}<div class="zab-section"><span class="zab-meta">${communityAuthorName(p,p)} · ${esc(rpTimeText(p))}</span><h2 style="margin:10px 0;font-size:17px">${esc(translatedText(p,'title'))}</h2><p>${esc(translatedText(p,'body'))}</p><div class="zab-engagement">${likeControl(p.id,p)}<span class="zab-card-metric">${boardIcon('message')}<span>댓글 ${stats(p).comments}</span></span><span class="zab-card-metric">${boardIcon('eye')}<span>조회 ${p.views}</span></span></div></div><div class="zab-section"><b>댓글 ${stats(p).comments}</b>${comments||'<p class="zab-note">아직 댓글이 없어요.</p>'}</div><label>댓글 작성</label><textarea id="zab-comment-text" rows="2" placeholder="댓글 입력"></textarea><div class="zab-comment-submit">${btn('send-comment','댓글 등록','zab-primary')}</div>`;}
-  function renderWrite(){return `<div class="zab-write-screen"><div class="zab-write-card"><h3>글쓰기</h3><label for="zab-own-title">제목 <span class="zab-required" aria-hidden="true">*</span></label><input id="zab-own-title" maxlength="180" placeholder="게시글 제목을 입력하세요" required><label for="zab-own-body">본문 <span class="zab-required" aria-hidden="true">*</span></label><textarea id="zab-own-body" placeholder="내용을 입력하세요" required></textarea></div><div class="zab-write-actions">${btn('back','취소')}${btn('publish','게시글 등록','zab-primary')}</div></div>`;}
+  function renderWrite(){return `<div class="zab-write-screen"><div class="zab-write-card"><h3>글쓰기</h3><label for="zab-own-title">제목 <span class="zab-required" aria-hidden="true">*</span></label><input id="zab-own-title" maxlength="180" placeholder="게시글 제목을 입력하세요" required><label for="zab-own-body">본문 <span class="zab-required" aria-hidden="true">*</span></label><textarea id="zab-own-body" rows="4" placeholder="내용을 입력하세요" required></textarea></div><div class="zab-write-actions">${btn('back','취소')}${btn('publish','게시글 등록','zab-primary')}</div></div>`;}
   function renderProfilePanel(){
     const profiles=data?.settings?.profiles||{};
     return `<h4>프로필 불러오기</h4>
@@ -1689,6 +1699,7 @@
     return;
   }if(a==='react'){return generate('react',currentBoard().posts.find(x=>x.id===detailId));}if(a==='save-key'){setKey(panel.querySelector('#zab-api-key')?.value||'');panel.querySelector('#zab-api-key').value='';show('API 키를 저장했어요.');return;}if(a==='models')return fetchModels();if(a==='check-model')return checkSelectedModel();if(a==='set-manual-model'){const id=String(panel.querySelector('#zab-manual-model')?.value||'').trim().replace(/^models\//,'');if(!/^[a-zA-Z0-9._-]{3,100}$/.test(id))return show('올바른 Gemini 모델 ID를 입력하세요.');data.settings.model=id;saveSettings();return show('모델을 '+id+'로 설정했어요.');}if(a==='refresh-profiles'){requestProfiles();return;}if(a==='select-all-characters'||a==='clear-all-characters'){profileDraftSelection.characterIds=a==='select-all-characters'?profileCache.characters.map(profileKey):[];render();return;}if(a==='save-profiles'){saveProfileDraft();return;}if(a==='discard-profiles'){discardProfileDraft();return;}if(a.startsWith('edit-custom:')){const id=a.slice(12),c=data.settings.custom.find(x=>x.id===id);if(!c)return;const name=prompt('커뮤니티 이름',c.name);if(name===null)return;const desc=prompt('커뮤니티 설명·분위기',c.desc);if(desc===null)return;const nick=prompt('닉네임 형식',c.nick);if(nick===null)return;const style=prompt('말투 지침',c.style);if(style===null)return;const color=prompt('강조색 HEX (예: #505969)',c.color||'#505969');if(color===null)return;if(!/^#[0-9a-f]{6}$/i.test(color))return show('강조색은 #RRGGBB 형식으로 입력해 주세요.');Object.assign(c,{name:short(name,80)||c.name,desc:short(desc,2000),nick:short(nick,400),style:short(style,2000),color});saveSettings();return;}if(a.startsWith('remove-custom:')){const id=a.slice(14);if(!confirm('커뮤니티 설정을 삭제할까요? 기록도 삭제하려면 데이터 관리에서 먼저 초기화해 주세요.'))return;data.settings.custom=data.settings.custom.filter(x=>x.id!==id);if(data.settings.selected===id)communityChange('everytime');saveSettings();return;}if(a==='reset-community')return resetCommunity();if(a==='reset-room-communities')return resetRoomCommunities();if(a==='reset-all-chatrooms')return resetAllChatRooms();if(a==='export')return exportJSON();if(a==='import')return panel.querySelector('#zab-import-file')?.click();}
   function onInput(e){const el=e.target;
+    if(el.id==='zab-own-body'){resizeOwnBody(el);return;}
     if(el.dataset.profileEdit){
       const p=el.dataset.profileEdit==='user'?profileCache.users.find(x=>profileKey(x)===profileDraftSelection.userId):profileCache.characters.find(x=>profileKey(x)===el.dataset.profileId);
       if(p&&['name','description'].includes(el.dataset.profileField)){
