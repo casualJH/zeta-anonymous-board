@@ -361,9 +361,12 @@
     return '';
   }
   function rpSchoolName(){
+    const roomHeaders=[...document.querySelectorAll('h1,h2,[role="heading"],header')]
+      .filter(el=>!el.closest('#zab-panel'))
+      .slice(0,80).map(el=>String(el.textContent||'').trim().slice(0,200));
     const sources=[...worldTitleTexts(),
       ...observedTurns.slice(-35).flatMap(t=>safeArray(t.parts).map(p=>String(p.text||''))),
-      String(document.title||'')];
+      ...roomHeaders,String(document.title||'')];
     for(const source of sources){
       const matches=String(source).matchAll(/(?:^|[^가-힣A-Za-z0-9])([가-힣A-Za-z0-9]{2,18})\s*(대학교|대학)(?=\s|[가-힣\p{P}]|$)/gu);
       for(const m of matches){
