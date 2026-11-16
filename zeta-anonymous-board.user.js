@@ -1172,7 +1172,8 @@
       if(/^(?:officeworkers?|officeculture|workplace|companytalk)$/i.test(title)||/^(?:회사|기업|직장|사무실|조직|우리 회사)$/i.test(title))return '';
       // Unnamed occupational/community boards do not assert a concrete employer.
       // Gemini chooses the actual words; JavaScript only validates the generic form.
-      if(/^[가-힣a-zA-Z0-9·\s]{2,45}익명\s*게시판$/.test(title))return title;
+      const genericOfficeTopic=/^(?:소방관|소방직|소방|군인|군생활|경찰관|경찰|의료진|의료인|의료|간호사|의사|공무원|교직원|교사|교육계|직장인|직업인|직업군|근무자|현장직|일터|업무생활|직장생활|공공안전|안전직|공공기관직원|공무직|직장인들|사회생활|직업생활|직장인들의\s*일상)\s*익명\s*게시판$/;
+      if(genericOfficeTopic.test(title))return title;
       const sources=[...worldTitleTexts(),String(data?.settings?.guide||''),String(data?.settings?.communityGuides?.office||'')];
       const clean=value=>String(value||'').normalize('NFKC').toLowerCase().replace(/[\s·ㆍ._-]+/g,'');
       const target=clean(title);
