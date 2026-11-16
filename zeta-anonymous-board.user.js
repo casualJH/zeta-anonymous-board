@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.9.4
+// @version      0.9.5
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.9.4', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.9.5', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1129,6 +1129,34 @@
       const res=await call(alt);modelChecks.set(alt,{ok:true,at:now(),code:200});return res;
     }
   }
+  // Title generation receives only profiles, world and guidance; never RP turns or prior posts.
+  function boardTitlePrompt(){
+    const cfg=data.settings,com=currentCommunity(),profiles=profileSelection();
+    const rules=[
+      'Generate a single world-appropriate board title for the selected community, using ONLY the provided user profile, character profiles, world description and instructions.',
+      'Never derive the board name from conversations, actual RP turns, current plot events, previous posts, current residents, or recent actions.',
+      'Do not use a character name as the title or form a fan community around one character. Do not invent a school, company, region, or setting as an established fact.',
+      'Match the platform: Everytime campus board; Blind general employee topic; office board for a confirmed workplace; neighborhood local subject; gallery interest-based community; X fitting timeline topic; custom community its description.',
+      'For Reddit output an English subreddit name of form r/EnglishName with 3-21 ASCII letters, digits or underscores after r/. Do not use any character name, Korean text or generic WorldStory/CharacterTalk.',
+      'Return JSON only, exactly {"boardTitle":"your chosen board name"}.'
+    ].join('\n');
+    return rules+'\n[커뮤니티 유형] '+JSON.stringify({id:com.id,name:com.name,description:com.desc,style:com.style,example:com.styleExample||''})+
+      '\n[유저 프로필] '+JSON.stringify({text:short(cfg.profiles.user,5000),selected:profiles.user})+
+      '\n[캐릭터 프로필] '+JSON.stringify({text:short(cfg.profiles.characters,9000),selected:profiles.characters.slice(0,30)})+
+      '\n[세계관] '+JSON.stringify(short(cfg.profiles.world,6500))+
+      '\n[지침] '+JSON.stringify({general:short(cfg.guide,5000),community:short(cfg.communityGuides?.[com.id]||'',5000),gallery:com.id==='gallery'?short(cfg.galleryDescription,2000):'',custom:com.id.startsWith('custom-')?short(com.styleExample,2000):''})+
+      '\nDo not use any source except those explicitly included here. Return JSON only.';
+  }
+  function validatedBoardTitle(value,communityId){
+    const title=short(value,100).replace(/[\r\n\t]/g,' ').trim();
+    if(!title)return '';
+    if(communityId==='reddit'){
+      if(!/^r\/[A-Za-z0-9_]{3,21}$/.test(title))return '';
+      const names=safeArray(data.settings.savedProfiles?.characters).map(x=>String(x.name||'').replace(/[^a-z0-9]/gi,'').toLowerCase()).filter(Boolean);
+      if(names.includes(title.slice(2).replace(/[^a-z0-9]/gi,'').toLowerCase()))return '';
+    }
+    return title;
+  }
   function promptPayload(kind,post){const b=currentBoard(),s=data.settings,community=currentCommunity(),recent=observedTurns.slice(-Math.max(10,num(s.turns,1,999,1)+5)).map((t,i)=>({turn:i+1,content:t.parts.map(p=>`${p.speaker} (${p.role}): ${short(p.text,1300)}`).join('\n').slice(0,4500)}));const older=b.posts.slice(-num(s.oldPostWindow,0,300,20)).map(p=>({id:p.id,title:p.title,body:short(p.body,850),comments:p.comments.slice(-12).map(c=>({id:c.id,author:community.id==='gallery'?galleryDisplayNick(c):c.nick,source:c.source||'ai',text:short(c.text,450),replies:safeArray(c.replies).slice(-5).map(r=>({id:r.id,author:community.id==='gallery'?galleryDisplayNick(r):r.nick,source:r.source||'ai',text:short(r.text,220)}))}))}));const residents=Object.values(b.residents).slice(-40);
     const communityRules=community.id==='gallery'?'갤러리에서는 세계관에 맞는 주제와 관심사를 다루고, 짧은 반말과 한국 인터넷 갤러리식 표현을 상황에 맞게 자연스럽게 사용하라. 일회성 AI 주민은 유동닉 ㅇㅇ(가상 IP), 서로 다른 게시글에 반복 등장하여 확정된 고정 주민과 RP 캐릭터는 고정닉을 사용한다. 반고닉은 사용하지 않는다. 유저는 기본 유동닉이며 직접 닉네임을 지정하면 고정닉이다. 실제 IP를 수집하거나 추측하지 마라.':community.id==='blind'?
       '블라인드는 여러 회사의 직원이 참여하는 외부 직장인 커뮤니티다. 현재 RP 회사의 사내 게시판이 아니다. 서로 다른 업종·회사에 다니는 글쓴이들을 혼합하고 새 글의 과반수는 현재 RP 중심 회사와 무관한 다른 회사의 직장 생활·업계 이야기를 다뤄라. 필요한 경우 가상의 회사명을 자연스럽게 창작해도 되나, 개인에 대한 사실로 단정하지 마라. 게시글/댓글 작성자 닉네임은 반드시 세계관에 맞는 회사명 · 개성 있는 익명 별명 형태로 작성하라(예: 대한그룹 · 퇴사각재는중, 한빛전자 · 칼퇴하고싶다). 회사명 자리에 부서명·직급·팀명을 절대 넣지 말고, 실명·프로필 이름·익명직장인 같은 고정 이름을 사용하지 마라. 같은 주민 residentId는 회사와 닉네임을 유지하고, 다른 주민은 회사·별명을 다양하게 만들어라. 게시글과 댓글 JSON에 company 필드를 회사명으로 함께 제공하라. 특정 회사 내부에서만 알 수 있는 정보는 외부인이 본 것처럼 단정하지 마라.':community.id==='office'?
@@ -1157,17 +1185,11 @@
 6. 일반 주민의 독립적인 일상·잡담·주관적 의견, 세계관에 모순되지 않는 가상 가게·회사·지역 등 배경 창작은 허용한다. 단, 그것을 특정 유저·RP 캐릭터에게 일어난 새로운 사건·속마음·관계의 근거로 연결하지 마라.
 7. 이 규칙은 새 게시글의 제목·본문, 댓글·대댓글, 기존 글에 추가하는 반응, 모든 커뮤니티와 소문 이어가기 설정에 동일하게 적용한다. 다른 커뮤니티 지침이나 추가 지침이 충돌하더라도 이 사실 제한을 우선하라.
 8. 작성 전 실제 RP 근거 존재 여부 → 주민의 정보 접근 가능 여부 → 새 사건 창작 여부를 점검하라. 하나라도 불명확하면 유저·캐릭터에 관한 그 주장을 생략하고 관련 없는 주민 일상·일반적인 게시판 주제로 대체하라. 점검 과정은 출력하지 말고 JSON만 출력하라.`;
-    const needsBoardTitle=kind==='manual'&&!short(s.boardTitles?.[community.id],100)&&!short(b.generatedTitle,100);
-    const boardTitleRule=needsBoardTitle?`[이번 최초 수동 생성에서 게시판 이름 결정 · 모든 커뮤니티 공통]
-응답 JSON 최상위 boardTitle에 이 채팅방의 게시판 이름을 함께 제공하라. 수집된 세계관 설정 및 유저·캐릭터 프로필을 참고하되, 개인 이름 자체를 게시판 이름으로 삼거나 특정 캐릭터 팬클럽처럼 만들지 마라. 학교·지역·회사·취미·관심사 등 주민들이 모이는 장소와 게시판의 실제 주제에 맞춰 자연스럽고 고유하게 지어라. 특정 인물의 실명·캐릭터명, 그 이름의 단순 영문 표기 또는 r/캐릭터명은 금지한다. 해당 인물의 실제 행동이나 새로운 세계관 사실을 창작하여 제목의 근거로 삼지 마라.
-커뮤니티 유형을 구분하라: 에브리타임은 확인된 학교/캠퍼스를 반영한 한국어 게시판명, 블라인드는 외부 직장인들이 함께 이용할 법한 토픽 게시판명, 사내 게시판은 실제 소속 기업·조직이 확인되면 반영, 동네 게시판은 확인된 지역·생활 주제, 갤러리는 커뮤니티 관심사에 맞는 이름, X는 타임라인·주제에 맞는 이름, 사용자 지정 커뮤니티는 해당 소개와 말투에 맞는 이름을 써라. 확인되지 않은 학교·회사·지역을 실제라고 만들어 넣지 마라.
-Reddit만은 반드시 영어 서브레딧 형식 r/EnglishName으로 작성하라. r/ 뒤에는 영문·숫자·밑줄만 사용하고 3~21자로 제한하라. 구체적 주제에 맞는 영어 이름을 사용하고 한국어·캐릭터 이름·CharacterTalk·WorldStory·세계관이야기 같은 포괄적 기본값은 쓰지 마라.
-게시글·댓글 생성과 같은 응답으로 이름을 결정하라. JSON의 boardTitle 이외의 값은 기존 형식 그대로 유지하라.`:'[게시판 이름 유지] 이번 응답에서 boardTitle을 새로 제안하거나 변경하지 마라. 기존에 저장되었거나 사용자가 직접 설정한 게시판 이름을 유지한다.';
-    const schema=`JSON 형태: {"boardTitle":"최초 수동 생성 시에만 제안할 게시판 이름. 그 외에는 빈 문자열","posts":[{"title":"제목 원문","titleKo":"제목 한국어 번역","body":"본문 원문","bodyKo":"본문 한국어 번역","company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인인 경우에만 선택된 캐릭터의 프로필 id 또는 _key, 일반 주민이면 빈 문자열","residentId":"재사용할 주민 ID 또는 새 주민용 임의 별칭","views":10,"likes":2,"comments":[{"company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"댓글 원문","textKo":"댓글 한국어 번역","likes":1,"replies":[{"company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"대댓글 원문","textKo":"대댓글 한국어 번역","likes":0}]}]}],"updates":[{"postId":"과거 게시글 ID","comments":[{"company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"추가 댓글 원문","textKo":"추가 댓글 한국어 번역","likes":0,"replies":[]}],"replies":[{"parentCommentId":"기존 사용자 댓글 ID","company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"사용자 댓글에 대한 대댓글 원문","textKo":"대댓글 한국어 번역","likes":0}]}]}. 원본에 없는 postId는 사용 금지.`;
+    const schema=`JSON 형태: {"posts":[{"title":"제목 원문","titleKo":"제목 한국어 번역","body":"본문 원문","bodyKo":"본문 한국어 번역","company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인인 경우에만 선택된 캐릭터의 프로필 id 또는 _key, 일반 주민이면 빈 문자열","residentId":"재사용할 주민 ID 또는 새 주민용 임의 별칭","views":10,"likes":2,"comments":[{"company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"댓글 원문","textKo":"댓글 한국어 번역","likes":1,"replies":[{"company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"대댓글 원문","textKo":"대댓글 한국어 번역","likes":0}]}]}],"updates":[{"postId":"과거 게시글 ID","comments":[{"company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"추가 댓글 원문","textKo":"추가 댓글 한국어 번역","likes":0,"replies":[]}],"replies":[{"parentCommentId":"기존 사용자 댓글 ID","company":"소속 회사명(블라인드)","nick":"추가 지침이 있으면 그 닉네임 형식, 없으면 커뮤니티 기본 형식","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"사용자 댓글에 대한 대댓글 원문","textKo":"대댓글 한국어 번역","likes":0}]}]}. 원본에 없는 postId는 사용 금지.`;
     const translationRule=translationOn()?'[번역 ON] 영어 원문 등 해당 커뮤니티에 자연스러운 원문 언어로 먼저 작성하라. 원문 제목·본문·댓글·대댓글은 각각 title/body/text에 넣고, 같은 내용의 자연스럽고 충실한 한국어 번역을 titleKo/bodyKo/textKo에 함께 넣어라. Reddit에서는 영어 원문을 우선 생성하고 영어 인터넷 특유의 표현과 말투를 유지한다. 한국어 번역은 원문 의미를 누락하거나 창작하지 말고 대응시켜라. 모든 AI 신규/추가 댓글/대댓글에 번역 필드를 제공하라. 사용자 원문을 수정하거나 번역하여 다시 내보내지 마라.':'[번역 OFF] 원래 커뮤니티에 어울리는 언어와 말투로 작성하고 한국어 번역 필드는 생략하거나 빈 문자열로 둬라.';
     const userLanguageRule='[사용자 작성글 언어 해석 · 모든 커뮤니티 공통] 사용자가 직접 작성한 게시글·댓글·대댓글은 입력 언어와 관계없이 해당 커뮤니티의 기본 언어로 작성된 발언으로 간주하라. 주민과 RP 캐릭터는 해당 커뮤니티의 기본 언어로 된 발언을 읽은 것처럼 의미와 어조를 이해하고 자연스럽게 반응하라. 답변은 해당 커뮤니티의 언어와 말투를 따르라. 사용자 원문은 수정하지 않고 그대로 보존하라. 입력 언어가 다르다는 이유로 언어 차이를 지적하지 마라.';
     const task=kind==='react'?`아래 사용자 게시글/댓글을 대상으로 AI 주민의 반응만 생성. 새 게시글은 0개. 대상 글 ID=${post?.id||''}. 이전 글 중 해당 글에만 댓글 또는 기존 사용자 댓글에 대한 대댓글을 추가.`:`새 게시글 ${num(s.posts,1,15,3)}개를 목표로 생성하라. 새 게시글당 댓글 최대 ${num(s.newComments,0,30,7)}개. 기존 최근 ${num(s.oldPostWindow,0,300,20)}개 글 중 내용 관련성이 높은 글에만 추가 댓글을 작성하되, 모든 기존 글에 추가되는 댓글·대댓글 총합은 ${num(s.oldComments,0,100,10)}개 이하. 특히 관련성 있는 기존 사용자 댓글(source=user)을 확인해 해당 댓글 ID로 replies를 작성하라. ${s.quiet==='skip'?'공개 사건이 전혀 없다면 게시글과 댓글 생성 생략':s.quiet==='rumors'?'새 사건이 없으면 기존 소문만 이어가기':'새 사건이 없으면 세계관 주민 일상 글 작성'}.`;
-    return `${rpFactRules}\n${instructions}\n${boardTitleRule}\n${userLanguageRule}\n[번역 출력 규칙] ${translationRule}\n${galleryTopic}\n[사용자 지정 커뮤니티 지침] ${customStyle}\n[커뮤니티별 작성 규칙] ${nicknameOverride&&community.id==='blind'?'블라인드는 여러 회사의 직장인이 참여하는 외부 커뮤니티다. 특정 회사 내부의 비공개 정보는 노출하지 마라. 닉네임은 사용자 추가 지침을 우선하라.':nicknameOverride&&community.id==='office'?'사내 익명 게시판은 RP 세계관의 같은 회사 직원들만 참여한다. 닉네임은 사용자 추가 지침을 우선하라.':communityRules}\n[닉네임 필수 규칙] ${nicknameRule}\n${schema}\n[작업] ${task}\n[커뮤니티] ${JSON.stringify(community)}\n[커뮤니티별 생성 지침] ${short(s.communityGuides?.[community.id]||'',5000)}\n[수집된 프로필] ${JSON.stringify({user:short(s.profiles.user,5000),characters:short(s.profiles.characters,9000),world:short(s.profiles.world,6500),selectedCharacters:profileSelection().characters.slice(0,30),selectedUser:profileSelection().user})}\n[최근 RP 대화 (개인정보 및 비공개 사실은 주민에게 직접 노출 금지)] ${JSON.stringify(recent).slice(0,20000)}\n[기존 주민] ${JSON.stringify(residents).slice(0,7500)}\n[최근 커뮤니티 게시글 · 이전 AI 창작물은 실제 RP 사건의 증거가 아님] ${JSON.stringify(older).slice(0,14000)}\n[사용자 반응 대상] ${JSON.stringify(post||{}).slice(0,5000)}\n[최종 사실 검증] 위 RP 사실 및 정보 접근 제한을 제목·본문·댓글·대댓글 전부에 다시 적용하고, 확인되지 않은 유저·캐릭터의 행동·속마음·소문은 제거하라. JSON 객체만 답하라.`;
+    return `${rpFactRules}\n${instructions}\n${userLanguageRule}\n[번역 출력 규칙] ${translationRule}\n${galleryTopic}\n[사용자 지정 커뮤니티 지침] ${customStyle}\n[커뮤니티별 작성 규칙] ${nicknameOverride&&community.id==='blind'?'블라인드는 여러 회사의 직장인이 참여하는 외부 커뮤니티다. 특정 회사 내부의 비공개 정보는 노출하지 마라. 닉네임은 사용자 추가 지침을 우선하라.':nicknameOverride&&community.id==='office'?'사내 익명 게시판은 RP 세계관의 같은 회사 직원들만 참여한다. 닉네임은 사용자 추가 지침을 우선하라.':communityRules}\n[닉네임 필수 규칙] ${nicknameRule}\n${schema}\n[작업] ${task}\n[커뮤니티] ${JSON.stringify(community)}\n[커뮤니티별 생성 지침] ${short(s.communityGuides?.[community.id]||'',5000)}\n[수집된 프로필] ${JSON.stringify({user:short(s.profiles.user,5000),characters:short(s.profiles.characters,9000),world:short(s.profiles.world,6500),selectedCharacters:profileSelection().characters.slice(0,30),selectedUser:profileSelection().user})}\n[최근 RP 대화 (개인정보 및 비공개 사실은 주민에게 직접 노출 금지)] ${JSON.stringify(recent).slice(0,20000)}\n[기존 주민] ${JSON.stringify(residents).slice(0,7500)}\n[최근 커뮤니티 게시글 · 이전 AI 창작물은 실제 RP 사건의 증거가 아님] ${JSON.stringify(older).slice(0,14000)}\n[사용자 반응 대상] ${JSON.stringify(post||{}).slice(0,5000)}\n[최종 사실 검증] 위 RP 사실 및 정보 접근 제한을 제목·본문·댓글·대댓글 전부에 다시 적용하고, 확인되지 않은 유저·캐릭터의 행동·속마음·소문은 제거하라. JSON 객체만 답하라.`;
   }
   function parseGemini(result){let text=safeArray(result.candidates?.[0]?.content?.parts).map(p=>p.text||'').join('').trim();text=text.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');try{return JSON.parse(text);}catch{const m=/\{[\s\S]*\}/.exec(text);if(m)return JSON.parse(m[0]);throw new Error('Gemini JSON 형식 오류');}}
   // Blind's displayed identity uses a company, not a department or a real person.
@@ -1393,16 +1415,6 @@ Reddit만은 반드시 영어 서브레딧 형식 r/EnglishName으로 작성하�
   }
   function normalizeComment(raw){const rpTime=currentRpStamp();const c={id:uid(),nicknameGuideKey:nicknameGuideKey(),characterProfileId:characterAuthorKey(raw),textKo:translationOn()?short(raw.textKo||'',3500):'',nick:communityNick(raw.nick,raw.residentId,raw.company,characterAuthorKey(raw)),residentId:short(raw.residentId||'',75),text:short(raw.text,3500),likes:num(raw.likes,0,999999,0),time:now(),rpTime,source:'ai',replies:[]};c.replies=safeArray(raw.replies).slice(0,12).map(r=>({id:uid(),nicknameGuideKey:nicknameGuideKey(),characterProfileId:characterAuthorKey(r),textKo:translationOn()?short(r.textKo||'',3000):'',nick:communityNick(r.nick,r.residentId,r.company),residentId:short(r.residentId||'',75),text:short(r.text,3000),likes:num(r.likes,0,999999,0),time:now(),rpTime,source:'ai',parentId:c.id})).filter(x=>x.text);return c;}
   function applyResult(out,kind,replaceBatch){if(!out||typeof out!=='object')throw new Error('Gemini 생성 결과가 올바르지 않아요.');const board=currentBoard();if(replaceBatch)rollback(replaceBatch);const batch={id:uid(),created:[],comments:[],metrics:{},temporary:kind==='auto',time:now()};const posts=kind==='react'?[]:safeArray(out.posts).slice(0,num(data.settings.posts,1,15,3));for(const raw of posts){if(!String(raw.title||'').trim()&&!String(raw.body||'').trim())continue;const p={id:uid(),nicknameGuideKey:nicknameGuideKey(),characterProfileId:characterAuthorKey(raw),titleKo:translationOn()?short(raw.titleKo||'',180):'',bodyKo:translationOn()?short(raw.bodyKo||'',8500):'',title:short(raw.title||'무제',180),body:short(raw.body,8500),nick:communityNick(raw.nick,raw.residentId,raw.company,characterAuthorKey(raw)),residentId:short(raw.residentId||'',75),views:num(raw.views,0,10000000,10),likes:num(raw.likes,0,10000000,0),time:now(),rpTime:currentRpStamp(),source:'ai',comments:safeArray(raw.comments).slice(0,num(data.settings.newComments,0,30,7)).map(normalizeComment).filter(c=>c.text)};board.posts.push(p);batch.created.push(p.id);}
-    // Store the AI title per room and community, without overriding manual titles.
-    if(kind==='manual'&&!short(data.settings.boardTitles?.[data.settings.selected],100)&&!short(board.generatedTitle,100)){
-      let title=short(out.boardTitle,100).replace(/[\r\n\t]/g,' ').trim();
-      if(data.settings.selected==='reddit'){
-        if(!/^r\/[A-Za-z0-9_]{3,21}$/.test(title))title='';
-        const identities=safeArray(data.settings.savedProfiles?.characters).map(x=>String(x.name||'').replace(/[^a-z0-9]/gi,'').toLowerCase()).filter(Boolean);
-        if(identities.includes(title.slice(2).replace(/[^a-z0-9]/gi,'').toLowerCase()))title='';
-      }
-      if(title)board.generatedTitle=title;
-    }
     let count=0;const eligible=new Set(board.posts.slice(-num(data.settings.oldPostWindow,0,300,20)-posts.length).filter(p=>!batch.created.includes(p.id)).map(p=>p.id));if(kind==='react'&&replaceBatch?.targetPost)eligible.add(replaceBatch.targetPost);
     for(const update of safeArray(out.updates)){const p=board.posts.find(p=>p.id===update.postId);if(!p||(!eligible.has(p.id)&&!(kind==='react'&&p.id===reactionTarget)))continue;for(const raw of safeArray(update.comments)){const c=normalizeComment(raw);const added=1+c.replies.length;if(count+added>num(data.settings.oldComments,0,100,10))break;if(!c.text)continue;p.comments.push(c);batch.comments.push(c.id,...c.replies.map(r=>r.id));count+=added;}}
     // Attach AI responses to existing user comments, never to the post root.
@@ -1458,7 +1470,17 @@ Reddit만은 반드시 영어 서브레딧 형식 r/EnglishName으로 작성하�
       profilePanelOpen=true;settingsOpen=false;render();return show('필수 프로필 선택이 필요해요. '+profileSelectionStatus());
     }
     if(!board.started&&kind==='auto')return;clearTimeout(autoTimer);const batchToReplace=kind==='regenerate'?board.lastBatch:null;
-    const request={id:uid(),kind,cancelled:false,room,community:data.settings.selected,epoch:runEpoch,request:null};const countedAtStart=turnCount;let succeeded=false;busy=request;reactionTarget=post?.id||'';renderStatus();try{const prompt=promptPayload(kind,post);const model=data.settings.model||models[0];const body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.9,responseMimeType:'application/json',maxOutputTokens:8192}};const res=await generateWithFallback(key,model,body,request);if(request.cancelled||busy!==request||request.room!==room||request.community!==data?.settings.selected||request.epoch!==runEpoch)return;const result=parseGemini(res);if(kind==='regenerate'&&batchToReplace&&board.lastBatch!==batchToReplace)throw Error('재생성 대상이 변경되었습니다.');const next=applyResult(result,kind,batchToReplace);if(kind==='manual'||kind==='auto'){turnCount=kind==='auto'?Math.max(0,turnCount-countedAtStart):0;autoStage='';if(kind==='manual'&&baselineReady){const complete=buildTurns(lastRawMessageSnapshot).filter(t=>!t.incomplete);completedTurnTotal=complete.length;const last=complete.at(-1);if(last){activeTurnKey=last.id;activeTurnHash=fingerprint(last);}}}if(kind==='regenerate'){next.temporary=batchToReplace?.temporary||false;saved();}succeeded=true;show('게시판 갱신 완료 · 새 게시글 '+next.created.length+'개');render();}
+    const request={id:uid(),kind,cancelled:false,room,community:data.settings.selected,epoch:runEpoch,request:null};const countedAtStart=turnCount;let succeeded=false;busy=request;reactionTarget=post?.id||'';renderStatus();try{const model=data.settings.model||models[0];
+      if(kind==='manual'&&!short(data.settings.boardTitles?.[request.community],100)&&!short(board.generatedTitle,100)){
+        try{
+          const namingBody={contents:[{role:'user',parts:[{text:boardTitlePrompt()}]}],generationConfig:{temperature:0.6,responseMimeType:'application/json',maxOutputTokens:256}};
+          const naming=parseGemini(await generateWithFallback(key,model,namingBody,request));
+          if(request.cancelled||busy!==request||request.room!==room||request.community!==data?.settings.selected||request.epoch!==runEpoch)return;
+          const chosen=validatedBoardTitle(naming.boardTitle,request.community);
+          if(chosen&&!short(data.settings.boardTitles?.[request.community],100)&&!short(board.generatedTitle,100)){board.generatedTitle=chosen;saved();}
+        }catch(err){if(request.cancelled)return;console.warn('[제타 익명 게시판] 게시판 이름 생성 실패:',err);}
+      }
+      const prompt=promptPayload(kind,post);const body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.9,responseMimeType:'application/json',maxOutputTokens:8192}};const res=await generateWithFallback(key,model,body,request);if(request.cancelled||busy!==request||request.room!==room||request.community!==data?.settings.selected||request.epoch!==runEpoch)return;const result=parseGemini(res);if(kind==='regenerate'&&batchToReplace&&board.lastBatch!==batchToReplace)throw Error('재생성 대상이 변경되었습니다.');const next=applyResult(result,kind,batchToReplace);if(kind==='manual'||kind==='auto'){turnCount=kind==='auto'?Math.max(0,turnCount-countedAtStart):0;autoStage='';if(kind==='manual'&&baselineReady){const complete=buildTurns(lastRawMessageSnapshot).filter(t=>!t.incomplete);completedTurnTotal=complete.length;const last=complete.at(-1);if(last){activeTurnKey=last.id;activeTurnHash=fingerprint(last);}}}if(kind==='regenerate'){next.temporary=batchToReplace?.temporary||false;saved();}succeeded=true;show('게시판 갱신 완료 · 새 게시글 '+next.created.length+'개');render();}
     catch(e){if(!request.cancelled)show('게시글 생성 실패: '+e.message);}finally{if(busy===request)busy=null;reactionTarget='';if(succeeded&&kind==='auto'&&turnCount>=data?.settings.turns&&data?.settings.auto&&!autoTimer&&activeTurnKey&&!request.cancelled)scheduleAuto(activeTurnKey,activeTurnHash);render();}
   }
   function chooseNick(){
