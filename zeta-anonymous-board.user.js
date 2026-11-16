@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.5.14
+// @version      0.6.0
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.5.14', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.6.0', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -41,7 +41,7 @@
     {id:'neighborhood',name:'동네 게시판',desc:'동네 생활, 목격담과 지역 정보',nick:'동네산책러, 이웃주민',style:'주민 카페 말투'},
     {id:'gallery',name:'갤러리',desc:'세계관에 어울리는 관심사와 일상을 나누는 한국어 게시판',nick:'ㅇㅇ(가상 IP), 고정닉',style:'자연스러운 반말과 갤러리식 표현'}
   ];
-  const defaults=()=>({auto:true,turns:1,autoDelaySeconds:10,posts:3,newComments:7,oldComments:10,oldPostWindow:20,quiet:'daily',model:'gemini-3.5-flash-lite',fallback:'gemini-3.1-flash-lite',temperature:0.9,guide:'',userNickMode:'auto',userNick:'',selected:'everytime',boardTitles:{},topTitles:{},translationEnabled:{reddit:true},galleryDescription:'',communityConfirmed:false,custom:[],status:'',profiles:{user:'',characters:'',world:''},profileSelection:{userId:'',characterIds:[]},savedProfiles:null});
+  const defaults=()=>({timeMode:'real',auto:true,turns:1,autoDelaySeconds:10,posts:3,newComments:7,oldComments:10,oldPostWindow:20,quiet:'daily',model:'gemini-3.5-flash-lite',fallback:'gemini-3.1-flash-lite',temperature:0.9,guide:'',userNickMode:'auto',userNick:'',selected:'everytime',boardTitles:{},topTitles:{},translationEnabled:{reddit:true},galleryDescription:'',communityConfirmed:false,custom:[],status:'',profiles:{user:'',characters:'',world:''},profileSelection:{userId:'',characterIds:[]},savedProfiles:null});
   const now=()=>Date.now(), uid=()=> (crypto.randomUUID?.()||'id-'+now().toString(36)+'-'+Math.random().toString(36).slice(2));
   const num=(x,min,max,d)=>{const n=Number(x);return Number.isFinite(n)?Math.max(min,Math.min(max,Math.trunc(n))):d;};
   const copy=x=>JSON.parse(JSON.stringify(x));
@@ -1379,17 +1379,70 @@
     target.likes=Math.max(0,num(target.likes,0,99999999,0)+(liked?-1:1));
     target.likedByMe=!liked;saved();render();
   }
-  // Only dates/clocks explicitly present in RP are used; device timestamps are never displayed.
-  function currentRpStamp(){
-    const texts=observedTurns.slice(-12).flatMap(t=>safeArray(t.parts).map(p=>String(p.text||''))).reverse();
-    const dateRE=/(20\d{2})[.\/-]\s*(1[0-2]|0?[1-9])[.\/-]\s*(3[01]|[12]\d|0?[1-9])|(1[0-2]|0?[1-9])월\s*(3[01]|[12]\d|0?[1-9])일/g;
-    const clockRE=/([01]?\d|2[0-3]):([0-5]\d)|(오전|오후)\s*(1[0-2]|0?[1-9])시(?:\s*([0-5]?\d)분)?/g;
-    let date='',clock='';
-    for(const t of texts){const hits=[...t.matchAll(dateRE)];const m=hits.at(-1);if(m){date=m[1]?m[1]+'년 '+Number(m[2])+'월 '+Number(m[3])+'일':Number(m[4])+'월 '+Number(m[5])+'일';break;}}
-    for(const t of texts){const hits=[...t.matchAll(clockRE)];const m=hits.at(-1);if(m){clock=m[1]?m[1].padStart(2,'0')+':'+m[2]:m[3]+' '+Number(m[4])+'시'+(m[5]?' '+Number(m[5])+'분':'');break;}}
+  // Actual time is the default. In RP mode only the newest completed
+  // turn's fenced status blocks or API INFO_BOX parts supply dates/clocks.
+  // Missing RP components are never guessed or merged with other turns.
+  function realTimeStamp(){
+    const d=new Date(),pad=n=>String(n).padStart(2,'0');
+    return d.getFullYear()+'.'+pad(d.getMonth()+1)+'.'+pad(d.getDate())+' '+(d.getHours()<12?'오전':'오후')+' '+pad(d.getHours()%12||12)+':'+pad(d.getMinutes());
+  }
+  function statusBlocksOf(turn){
+    const blocks=[];
+    for(const part of safeArray(turn?.parts)){
+      const value=String(part.text||'');
+      if(part.kind==='INFO_BOX')blocks.push(value);
+      // Match both unlabeled triple-fence blocks and fenced InfoBox blocks.
+      const fences=/\x60{3,}[^\r\n]*\r?\n([\s\S]*?)\x60{3,}/g;
+      for(const found of value.matchAll(fences))blocks.push(found[1]);
+    }
+    return blocks;
+  }
+  function rpStampFromBlock(value){
+    const text=String(value||'');
+    const pad=n=>String(n).padStart(2,'0');
+    const dates=[];
+    const dateRE=/(20\d{2})\s*[.\/-]\s*(1[0-2]|0?[1-9])\s*[.\/-]\s*(3[01]|[12]\d|0?[1-9])|(20\d{2})\s*년\s*(1[0-2]|0?[1-9])\s*월\s*(3[01]|[12]\d|0?[1-9])\s*일/g;
+    for(const m of text.matchAll(dateRE)){
+      const y=Number(m[1]||m[4]),month=Number(m[2]||m[5]),day=Number(m[3]||m[6]);
+      if(new Date(y,month-1,day).getFullYear()===y&&new Date(y,month-1,day).getMonth()===month-1&&new Date(y,month-1,day).getDate()===day)dates.push({index:m.index,value:y+'.'+pad(month)+'.'+pad(day)});
+    }
+    const clocks=[];
+    const ampmRE=/(오전|오후)\s*(1[0-2]|0?[1-9])\s*(?::|시)\s*(?:([0-5]?\d)\s*분?)?/g;
+    const meridiemRanges=[];
+    for(const m of text.matchAll(ampmRE)){
+      const hour=Number(m[2]),minute=Number(m[3]||0),h=(hour%12)+(m[1]==='오후'?12:0);
+      clocks.push({index:m.index,value:(h<12?'오전':'오후')+' '+pad(h%12||12)+':'+pad(minute)});
+      meridiemRanges.push([m.index,m.index+m[0].length]);
+    }
+    const clockRE=/(^|[^\d])([01]?\d|2[0-3])\s*(?::\s*([0-5]\d)|시\s*(?:([0-5]?\d)\s*분)?)/gm;
+    for(const m of text.matchAll(clockRE)){
+      const index=m.index+m[1].length;
+      if(meridiemRanges.some(([a,b])=>index>=a&&index<b))continue;
+      const h=Number(m[2]),minute=Number(m[3]||m[4]||0);
+      clocks.push({index,value:(h<12?'오전':'오후')+' '+pad(h%12||12)+':'+pad(minute)});
+    }
+    dates.sort((a,b)=>a.index-b.index);
+    clocks.sort((a,b)=>a.index-b.index);
+    const date=dates.at(-1)?.value||'',clock=clocks.at(-1)?.value||'';
     return [date,clock].filter(Boolean).join(' ');
   }
-  function rpTimeText(item){return item?.rpTime||'RP 시간 미상';}
+  function currentRpStamp(){
+    if(data?.settings?.timeMode!=='rp')return realTimeStamp();
+    const latest=observedTurns.at(-1);
+    if(!latest)return '';
+    const blocks=statusBlocksOf(latest);
+    // If the latest status block has just a date or just a time, show only it.
+    // Other turns and real-world time are not used in RP mode.
+    for(let i=blocks.length-1;i>=0;i--){
+      const stamp=rpStampFromBlock(blocks[i]);
+      if(stamp)return stamp;
+    }
+    return '';
+  }
+  function rpTimeText(item){
+    // Preserve legacy records exactly; an explicit empty timestamp is hidden.
+    return item&&Object.prototype.hasOwnProperty.call(item,'rpTime')?String(item.rpTime||''):'RP 시간 미상';
+  }
   function stats(c){return {views:c.views||0,likes:c.likes||0,comments:c.comments.reduce((n,x)=>n+1+x.replies.length,0)};}
   function sortedPosts(){const b=currentBoard();const posts=b.sort==='unread'?b.posts.filter(needsReview):b.posts;return [...posts].sort((a,z)=>b.sort==='recent'||b.sort==='unread'?z.time-a.time:((z.likes*5+stats(z).comments*3+z.views/20)/(1+Math.max(0,(now()-z.time)/86400000)*.1))-((a.likes*5+stats(a).comments*3+a.views/20)/(1+Math.max(0,(now()-a.time)/86400000)*.1)));}
   function renderStatus(){if(!panel)return;const el=panel.querySelector('#zab-status');if(el){const phase=autoStage==='waiting'?' · 생성 대기 중':autoStage==='verifying'?' · 최신 대화 확인 중':autoStage==='retry'?' · 조회 재시도 중':autoStage==='failed'?' · 조회 실패':'';el.textContent=busy?'게시글 생성 중…':now()<noticeUntil?notice:data?'자동 '+(data.settings.auto?'ON':'OFF')+' · '+turnCount+'/'+data.settings.turns+'턴'+(completedTurnTotal!==null?' · 전체 '+completedTurnTotal+'턴':(turnStatusError?' · 조회 오류: '+short(turnStatusError,85):turnLoading?' · 대화 수집 '+turnPages+'페이지 / '+turnLoadCount+'개':' · 대화 확인 중'))+(data.settings.auto&&!currentBoard().started?' · 첫 수동 생성 필요':data.settings.auto&&!profileReady()?' · 프로필 선택 필요':phase):'채팅방 연결 대기 중';}const count=launcher?.querySelector('.zab-unread');if(count)count.textContent=data?.boards?.[data.settings.selected]?.unread?'●':'';const cancel=panel.querySelector('#zab-cancel');if(cancel)cancel.hidden=!busy;}
@@ -1628,11 +1681,11 @@
   function renderList(){const b=currentBoard(),com=currentCommunity();return `${setupGuide()}<div class="zab-board-hero"><div><strong class="zab-board-name">${esc(communityBoardTitle())}</strong><div class="zab-note">${esc(short(com.id==='gallery'?(data.settings.galleryDescription||com.desc):com.desc,95))}</div></div><button class="zab-my-button" data-act="profiles-panel" aria-label="My: 프로필/커뮤니티 설정" title="My: 프로필/커뮤니티 설정">My</button></div>
     <div class="zab-toolbar"><button type="button" data-act="write" class="zab-write-button zab-primary">${boardIcon('pen')}<span>글쓰기</span></button>${btn('generate','수동 생성')}${btn('regen','다시 생성','',!b.lastBatch?'disabled':'')}</div>
     <div class="zab-flex zab-list-heading"><b>전체 게시글 ${b.posts.length}</b><div class="zab-sort-switch" role="group" aria-label="게시글 정렬">${btn('sort-recent','최신순',b.sort==='recent'?'is-active':'')}${btn('sort-popular','인기순',b.sort==='popular'?'is-active':'')}${btn('sort-unread','미확인',b.sort==='unread'?'is-active':'')}</div></div>
-    ${translationToggle()}${!b.posts.length?'<div class="zab-section" style="text-align:center;padding:40px 10px;color:#888">게시글이 없어요.<br>수동 생성 버튼으로 첫 게시글을 만들어 보세요.</div>':b.sort==='unread'&&!sortedPosts().length?'<div class="zab-section" style="text-align:center;padding:40px 10px;color:#888">미확인 게시글이 없어요.</div>':sortedPosts().map(p=>`<div class="zab-card" data-open="${esc(p.id)}"><h3>${needsReview(p)?'<span class="zab-chip">NEW</span> ':''}${esc(translatedText(p,'title'))}</h3><div class="excerpt">${esc(short(translatedText(p,'body'),150))}</div><div class="zab-meta">${communityAuthorName(p,p)} · ${esc(rpTimeText(p))}</div>${boardListMetrics(p)}</div>`).join('')}`;}
+    ${translationToggle()}${!b.posts.length?'<div class="zab-section" style="text-align:center;padding:40px 10px;color:#888">게시글이 없어요.<br>수동 생성 버튼으로 첫 게시글을 만들어 보세요.</div>':b.sort==='unread'&&!sortedPosts().length?'<div class="zab-section" style="text-align:center;padding:40px 10px;color:#888">미확인 게시글이 없어요.</div>':sortedPosts().map(p=>`<div class="zab-card" data-open="${esc(p.id)}"><h3>${needsReview(p)?'<span class="zab-chip">NEW</span> ':''}${esc(translatedText(p,'title'))}</h3><div class="excerpt">${esc(short(translatedText(p,'body'),150))}</div><div class="zab-meta">${communityAuthorName(p,p)}${rpTimeText(p)?' · '+esc(rpTimeText(p)):''}</div>${boardListMetrics(p)}</div>`).join('')}`;}
   function likeControl(postId,item){
     return `<button type="button" class="zab-like-inline${item.likedByMe?' is-liked':''}" data-act="like:${esc(postId)}:${esc(item.id)}" aria-label="좋아요 ${num(item.likes,0,99999999,0)}개" aria-pressed="${item.likedByMe?'true':'false'}"><span aria-hidden="true">${item.likedByMe?'♥':'♡'}</span><span>${num(item.likes,0,99999999,0)}</span></button>`;
   }
-  function renderDetail(){const p=currentBoard().posts.find(x=>x.id===detailId);if(!p){postsView='list';return renderList();}const comments=p.comments.map(c=>`<div class="zab-comment"><div><b>${communityAuthorName(c,p)}</b> <span class="zab-meta">${esc(rpTimeText(c))}</span></div><p style="margin:4px 0">${esc(translatedText(c,'text'))}</p><div class="zab-comment-actions">${likeControl(p.id,c)}${btn('reply:'+c.id,'답글','zab-text-action',`data-post="${esc(p.id)}"`)}</div><div class="zab-inline-reply" data-reply-parent="${esc(c.id)}"></div>${c.replies.length?`<div class="zab-replies">${c.replies.map(r=>`<div class="zab-reply"><b>${communityAuthorName(r,p)}</b> <span class="zab-meta">${esc(rpTimeText(r))}</span><p style="margin:4px 0">${esc(translatedText(r,'text'))}</p><div class="zab-comment-actions">${likeControl(p.id,r)}${btn('reply:'+c.id,'답글','zab-text-action',`data-post="${esc(p.id)}"`)}</div></div>`).join('')}</div>`:''} </div>`).join('');return `<div class="zab-flex">${btn('back','← 목록')} <div>${btn('react','AI 반응 생성','zab-primary')}${btn('delete','게시글 삭제','zab-danger','')}</div></div>${translationToggle()}<div class="zab-section"><span class="zab-meta">${communityAuthorName(p,p)} · ${esc(rpTimeText(p))}</span><h2 style="margin:10px 0;font-size:17px">${esc(translatedText(p,'title'))}</h2><p>${esc(translatedText(p,'body'))}</p><div class="zab-engagement">${likeControl(p.id,p)}<span class="zab-card-metric">${boardIcon('message')}<span>댓글 ${stats(p).comments}</span></span><span class="zab-card-metric">${boardIcon('eye')}<span>조회 ${p.views}</span></span></div></div><div class="zab-section"><b>댓글 ${stats(p).comments}</b>${comments||'<p class="zab-note">아직 댓글이 없어요.</p>'}</div><label>댓글 작성</label><textarea id="zab-comment-text" rows="2" placeholder="댓글 입력"></textarea><div class="zab-comment-submit">${btn('send-comment','댓글 등록','zab-primary')}</div>`;}
+  function renderDetail(){const p=currentBoard().posts.find(x=>x.id===detailId);if(!p){postsView='list';return renderList();}const comments=p.comments.map(c=>`<div class="zab-comment"><div><b>${communityAuthorName(c,p)}</b> ${rpTimeText(c)?'<span class="zab-meta">'+esc(rpTimeText(c))+'</span>':''}</div><p style="margin:4px 0">${esc(translatedText(c,'text'))}</p><div class="zab-comment-actions">${likeControl(p.id,c)}${btn('reply:'+c.id,'답글','zab-text-action',`data-post="${esc(p.id)}"`)}</div><div class="zab-inline-reply" data-reply-parent="${esc(c.id)}"></div>${c.replies.length?`<div class="zab-replies">${c.replies.map(r=>`<div class="zab-reply"><b>${communityAuthorName(r,p)}</b> ${rpTimeText(r)?'<span class="zab-meta">'+esc(rpTimeText(r))+'</span>':''}<p style="margin:4px 0">${esc(translatedText(r,'text'))}</p><div class="zab-comment-actions">${likeControl(p.id,r)}${btn('reply:'+c.id,'답글','zab-text-action',`data-post="${esc(p.id)}"`)}</div></div>`).join('')}</div>`:''} </div>`).join('');return `<div class="zab-flex">${btn('back','← 목록')} <div>${btn('react','AI 반응 생성','zab-primary')}${btn('delete','게시글 삭제','zab-danger','')}</div></div>${translationToggle()}<div class="zab-section"><span class="zab-meta">${communityAuthorName(p,p)}${rpTimeText(p)?' · '+esc(rpTimeText(p)):''}</span><h2 style="margin:10px 0;font-size:17px">${esc(translatedText(p,'title'))}</h2><p>${esc(translatedText(p,'body'))}</p><div class="zab-engagement">${likeControl(p.id,p)}<span class="zab-card-metric">${boardIcon('message')}<span>댓글 ${stats(p).comments}</span></span><span class="zab-card-metric">${boardIcon('eye')}<span>조회 ${p.views}</span></span></div></div><div class="zab-section"><b>댓글 ${stats(p).comments}</b>${comments||'<p class="zab-note">아직 댓글이 없어요.</p>'}</div><label>댓글 작성</label><textarea id="zab-comment-text" rows="2" placeholder="댓글 입력"></textarea><div class="zab-comment-submit">${btn('send-comment','댓글 등록','zab-primary')}</div>`;}
   function renderWrite(){return `<div class="zab-write-screen"><div class="zab-write-card"><h3>글쓰기</h3><label for="zab-own-title">제목 <span class="zab-required" aria-hidden="true">*</span></label><input id="zab-own-title" maxlength="180" placeholder="게시글 제목을 입력하세요" required><label for="zab-own-body">본문 <span class="zab-required" aria-hidden="true">*</span></label><textarea id="zab-own-body" rows="4" placeholder="내용을 입력하세요" required></textarea></div><div class="zab-write-actions">${btn('back','취소')}${btn('publish','게시글 등록','zab-primary')}</div></div>`;}
   function renderProfilePanel(){
     const profiles=data?.settings?.profiles||{};
@@ -1645,7 +1698,7 @@
       <label>세계관 설정·배경</label>${ta('profiles.world',profiles.world||'',4)}
       <p class="zab-note">세계관 설명을 입력해도 필수 프로필 선택이 생략되지는 않아요.</p>`;
   }
-  function renderSettings(){const s=data.settings;return `${btn('settings-back','← 게시판으로')}<h3 style="margin:12px 0 8px">게시판 설정</h3><div class="zab-tabs">${tabs.map(([id,name])=>btn('tab:'+id,name,settingTab===id?'active':'')).join('')}</div><div class="zab-section zab-settings-section">${settingTab==='basic'?`<h4>테마</h4><label>화면 모드</label>${themeButtons()}<div class="zab-divider"></div><h4>기본 설정</h4><label><input type="checkbox" data-setting="auto" ${s.auto?'checked':''}> 자동 갱신 ON</label><label>자동 갱신 주기 (턴)</label>${inp('turns',s.turns,'number','min="1" max="999" step="1"')}<label>자동 생성 대기 시간 (초)</label>${inp('autoDelaySeconds',num(s.autoDelaySeconds,1,300,10),'number','min="1" max="300" step="1"')}<p class="zab-note">기본 대기 10초 · 설정 범위 1~300초 · 신규 턴 감지 후 대기</p><p class="zab-note">최초 수동 AI 생성 이후 자동 갱신됩니다. API 키와 유저·캐릭터 프로필 직접 선택이 필수예요.</p><p class="zab-note">${esc(profileSelectionStatus())}</p><div class="zab-divider"></div><h4>AI 생성 설정</h4><label>새 게시글 수</label>${inp('posts',s.posts,'number','min="1" max="15"')}<label>새 게시글당 최대 댓글 수</label>${inp('newComments',s.newComments,'number','min="0" max="30"')}<label>기존 글 추가 댓글 전체 최대 개수</label>${inp('oldComments',s.oldComments,'number','min="0" max="100"')}<label>기존 댓글 추가 대상 최근 게시글 수</label>${inp('oldPostWindow',s.oldPostWindow,'number','min="0" max="300"')}<label>공개적으로 목격된 새 사건이 없을 때</label>${selection('quiet',s.quiet,[['daily','일상 게시글 생성'],['skip','게시글 생성 안 함'],['rumors','기존 소문 이어가기']])}<label>추가 지침(말투 등)</label>${ta('guide',s.guide,4)}`:
+  function renderSettings(){const s=data.settings;return `${btn('settings-back','← 게시판으로')}<h3 style="margin:12px 0 8px">게시판 설정</h3><div class="zab-tabs">${tabs.map(([id,name])=>btn('tab:'+id,name,settingTab===id?'active':'')).join('')}</div><div class="zab-section zab-settings-section">${settingTab==='basic'?`<h4>테마</h4><label>화면 모드</label>${themeButtons()}<div class="zab-divider"></div><h4>기본 설정</h4><label><input type="checkbox" data-setting="auto" ${s.auto?'checked':''}> 자동 갱신 ON</label><label>자동 갱신 주기 (턴)</label>${inp('turns',s.turns,'number','min="1" max="999" step="1"')}<label>자동 생성 대기 시간 (초)</label>${inp('autoDelaySeconds',num(s.autoDelaySeconds,1,300,10),'number','min="1" max="300" step="1"')}<p class="zab-note">기본 대기 10초 · 설정 범위 1~300초 · 신규 턴 감지 후 대기</p><p class="zab-note">최초 수동 AI 생성 이후 자동 갱신됩니다. API 키와 유저·캐릭터 프로필 직접 선택이 필수예요.</p><p class="zab-note">${esc(profileSelectionStatus())}</p><div class="zab-divider"></div><h4>날짜·시간 설정</h4><label>게시글과 댓글에 표시할 시간 기준</label>${selection('timeMode',s.timeMode||'real',[['real','실제 시간 (기본값)'],['rp','RP 시간']])}<p class="zab-note">RP 시간은 가장 최근 턴의 코드블록/InfoBox 상태창에서 읽으며, 날짜 또는 시간만 있으면 확인된 항목만 표시합니다.</p><div class="zab-divider"></div><h4>AI 생성 설정</h4><label>새 게시글 수</label>${inp('posts',s.posts,'number','min="1" max="15"')}<label>새 게시글당 최대 댓글 수</label>${inp('newComments',s.newComments,'number','min="0" max="30"')}<label>기존 글 추가 댓글 전체 최대 개수</label>${inp('oldComments',s.oldComments,'number','min="0" max="100"')}<label>기존 댓글 추가 대상 최근 게시글 수</label>${inp('oldPostWindow',s.oldPostWindow,'number','min="0" max="300"')}<label>공개적으로 목격된 새 사건이 없을 때</label>${selection('quiet',s.quiet,[['daily','일상 게시글 생성'],['skip','게시글 생성 안 함'],['rumors','기존 소문 이어가기']])}<label>추가 지침(말투 등)</label>${ta('guide',s.guide,4)}`:
   settingTab==='community'?`<h4>프로필/커뮤니티</h4>
   <div class="zab-flex"><strong>① 프로필 불러오기</strong>${btn('toggle-profile-section',profileSectionOpen?'접기':'펼치기')}</div>
   ${profileSectionOpen?renderProfilePanel():`<p class="zab-note">${esc(profileSelectionStatus())}</p>`}
