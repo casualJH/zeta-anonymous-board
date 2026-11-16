@@ -1211,10 +1211,10 @@
     const existing=id&&board.residents?.[id]?.nick;
     const seed=String(id||characterKey||rawNick||uid());
     const source=short(existing||rawNick,60);
-    const parts=source.split(/\\s*·\\s*/);
+    const parts=source.split(/\s*·\s*/);
     const dept=parts.length>1&&/^[가-힣A-Za-z0-9]{2,24}(?:팀|부서|본부|파트|실|센터)$/.test(parts[0])?parts[0]:'';
     let alias=parts.length>1?parts.slice(1).join(' ').trim():source;
-    if(!alias||genericPlatformNames.test(alias)||isRpRealName(alias)||/^(?:익명사원\\d*|익명직원\\d*|부서미상)$/.test(alias))
+    if(!alias||genericPlatformNames.test(alias)||isRpRealName(alias)||/^(?:익명사원\d*|익명직원\d*|부서미상)$/.test(alias))
       alias=platformAlias('office',seed);
     return short((dept||'부서미상')+' · '+alias,60);
   }
