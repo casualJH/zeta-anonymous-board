@@ -1211,20 +1211,6 @@
   function parseGemini(result){let text=safeArray(result.candidates?.[0]?.content?.parts).map(p=>p.text||'').join('').trim();text=text.replace(/^```(?:json)?\s*/i,'').replace(/\s*```$/,'');try{return JSON.parse(text);}catch{const m=/\{[\s\S]*\}/.exec(text);if(m)return JSON.parse(m[0]);throw new Error('Gemini JSON 형식 오류');}}
   // Blind company/alias decisions belong to Gemini, not local regexes or name lists.
   const hashLabel=text=>{let h=2166136261;for(const ch of String(text||'')){h=Math.imul(h^ch.charCodeAt(0),16777619);}return h>>>0;};
-  function validBlindCompany(value){
-    const text=short(value,40);
-    return text&&!/^(?:회사|회사명|기업|직장|익명|직장인|소속미확인|미확인)$/i.test(text)?text:'';
-  }
-  function blindNick(rawNick,residentId,company){
-    const existing=residentId&&currentBoard().residents?.[residentId]?.nick;
-    if(existing&&existing.includes(' · '))return short(existing,60);
-    const raw=short(rawNick,60),parts=raw.split(/\s*·\s*/);
-    const chosenCompany=validBlindCompany(company)||(parts.length>1?validBlindCompany(parts[0]):'')||'소속미확인';
-    let alias=parts.length>1?parts.slice(1).join(' · ').trim():raw;
-    const rpNames=[data?.settings?.savedProfiles?.user?.name,...safeArray(data?.settings?.savedProfiles?.characters).map(p=>p.name)].filter(Boolean);
-    if(!alias||rpNames.includes(alias)||alias===chosenCompany)alias='익명';
-    return short(chosenCompany+' · '+alias,60);
-  }
   function userIdentityPrompt(){
     const settings=data.settings,selected=profileSelection(),community=currentCommunity();
     return [
