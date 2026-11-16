@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.8.7
+// @version      0.8.8
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.8.7', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.8.8', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -958,7 +958,7 @@
       const id=profileKey(p),checked=safeArray(selected.characterIds).includes(id);
       return `<div class="zab-section"><label class="zab-profile-choice"><input type="checkbox" data-profile-character="${esc(id)}" ${checked?'checked':''}><strong>${esc(p.name)}</strong></label>
         ${checked?`<label>캐릭터 이름 수정</label><input data-profile-edit="character" data-profile-id="${esc(id)}" data-profile-field="name" value="${esc(p.name)}" maxlength="160">
-        <label>캐릭터 설명 수정</label><textarea data-profile-edit="character" data-profile-id="${esc(id)}" data-profile-field="description" rows="5" placeholder="제타에서 캐릭터 프로필 사진을 클릭해 상세 설명을 연 다음, 프로필을 다시 불러오세요.">${esc(p.description)}</textarea>`:`<p class="zab-note">${esc(short(p.description,180)||'설명 미확인 · 제타에서 캐릭터 프로필 사진을 클릭해 상세 설명을 열고 다시 불러오세요.')}</p>`}</div>`;
+        <label>캐릭터 설명 수정</label><textarea data-profile-edit="character" data-profile-id="${esc(id)}" data-profile-field="description" rows="5" placeholder="제타에서 캐릭터 프로필 사진을 눌러 상세 설명을 확인한 뒤, 프로필을 다시 불러오세요.&#10;&#10;※ 상세 프로필에 설명이 없는 경우에는 해당 정보를 불러올 수 없습니다.">${esc(p.description)}</textarea>`:`<p class="zab-note">${esc(short(p.description,180)||'설명 미확인 · 제타에서 캐릭터 프로필 사진을 클릭해 상세 설명을 열고 다시 불러오세요.')}</p>`}</div>`;
     }).join('');
     return `<label>Gemini에 전달할 유저 프로필 (필수)</label>${userRows||'<p class="zab-note">불러온 유저 프로필이 없어요.</p>'}${userEditor}
       <div class="zab-profile-choose-header"><label>Gemini에 전달할 캐릭터 프로필 (필수)</label><div class="zab-profile-actions">${btn('select-all-characters','전체 선택')}${btn('clear-all-characters','전체 해제')}</div></div>
@@ -1715,6 +1715,9 @@
   #zab-panel .zab-divider{background:var(--zab-border);margin:14px 0}
   #zab-panel input:not([type=checkbox]),#zab-panel select,#zab-panel textarea{background:var(--zab-surface);color:var(--zab-text);border-color:var(--zab-border);border-radius:10px;min-height:39px;padding:10px}
   #zab-panel input::placeholder,#zab-panel textarea::placeholder{color:var(--zab-muted);opacity:.8}
+  /* Character description guidance only; real input text keeps the normal foreground. */
+  #zab-panel textarea[data-profile-edit="character"][data-profile-field="description"]::placeholder{color:#A0A0A0;opacity:1}
+  #zab-panel[data-theme="dark"] textarea[data-profile-edit="character"][data-profile-field="description"]::placeholder{color:#85858F;opacity:1}
   #zab-panel label.zab-profile-choice{background:var(--zab-surface2);border-color:var(--zab-border);border-radius:10px;padding:10px}
   #zab-panel .zab-profile-choice small{color:var(--zab-muted)}
   #zab-panel .zab-comment{padding:12px 0;border-color:var(--zab-border)}
