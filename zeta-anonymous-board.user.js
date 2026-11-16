@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.9.10
+// @version      0.9.11
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.9.10', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.9.11', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1140,24 +1140,38 @@
     if(communityId==='everytime'){
       const university=title.replace(/\s*자유게시판$/,'').trim();
       if(!/(?:대학교|대학|University|College|Institute)/i.test(university))return '';
-      const evidence=[...worldTitleTexts(),String(data?.settings?.guide||''),String(data?.settings?.communityGuides?.everytime||'')].join('\n').toLowerCase();
-      if(!evidence.includes(university.toLowerCase()))return '';
+      // Normalize whitespace and Korean 대학/대학교 variants without inventing a school.
+      const normalizeSchool=value=>String(value||'').normalize('NFKC').toLowerCase().replace(/[\s·ㆍ._-]+/g,'').replace(/대학교/g,'대학');
+      const target=normalizeSchool(university);
+      const sources=[...worldTitleTexts(),String(data?.settings?.guide||''),String(data?.settings?.communityGuides?.everytime||'')];
+      const grounded=sources.some(source=>{
+        const text=normalizeSchool(source);
+        let position=text.indexOf(target);
+        while(position>=0){
+          const before=position>0?text[position-1]:'';
+          const after=text[position+target.length]||'';
+          const validBefore=!before||!/[\p{L}]/u.test(before);
+          const validAfter=!after||!/[\p{L}]/u.test(after)||/[0-9]/.test(after);
+          if(validBefore&&validAfter)return true;
+          position=text.indexOf(target,position+1);
+        }
+        return false;
+      });
+      if(!grounded)return '';
       return short(university+' 자유게시판',100);
     }
     if(communityId==='office'){
-      // Verify the company/organization is identified in profile/world/instructions, not merely a coincidental word.
       if(/^(?:officeworkers?|officeculture|workplace|companytalk)$/i.test(title)||/^(?:회사|기업|직장|사무실|조직|우리 회사)$/i.test(title))return '';
       const sources=[...worldTitleTexts(),String(data?.settings?.guide||''),String(data?.settings?.communityGuides?.office||'')];
-      const suffix=/(?:그룹|기업|전자|건설|금융|테크|산업|통신|상사|제약|은행|보험|모터스|솔루션|유통|물산|바이오|시스템즈|홀딩스|주식회사|Corporation|Corp|Inc|Ltd|Company)/i;
-      const employment=/(?:회사|기업|직장|소속|근무|재직|직원|사원|팀|부서|본사|사옥|company|employer|corporation|office|works? at|employed)/i;
-      const grounded=sources.some(source=>{
-        const text=String(source||''),at=text.toLowerCase().indexOf(title.toLowerCase());
-        if(at<0)return false;
-        const before=text.slice(Math.max(0,at-80),at),after=text.slice(at+title.length,at+title.length+80);
-        return suffix.test(title)||employment.test(before+' '+after);
-      });
-      if(!grounded)return '';
-      return title;
+      const clean=value=>String(value||'').normalize('NFKC').toLowerCase().replace(/[\s·ㆍ._-]+/g,'');
+      const target=clean(title);
+      const companyContext=/(?:회사명|회사|기업명|기업|소속|근무처|근무지|재직|직장|직원|사원|고용주|company|employer|employed|works?\s+at)/i;
+      const grounded=sources.some(source=>String(source||'').split(/[\n.!?。！？;]+/).some(segment=>{
+        if(!clean(segment).includes(target))return false;
+        // A technical specialty alone does not establish the name of an employer.
+        return companyContext.test(segment);
+      }));
+      return grounded?title:'';
     }
     if(communityId==='gallery'){
       title=title.replace(/\s*갤러리$/,'').trim();
