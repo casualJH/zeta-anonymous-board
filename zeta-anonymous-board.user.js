@@ -1458,6 +1458,33 @@
   #zab-panel[data-theme="dark"] .zab-author-character-name{color:#C4B5FD}
   #zab-panel[data-theme="dark"] .zab-author-me-name{color:#A6D5FF}
   @media(max-width:380px){#zab-panel .zab-content{padding:10px}#zab-panel .zab-list-heading{align-items:flex-start}#zab-panel .zab-head{padding:9px 10px}#zab-panel .zab-tabs button{padding:8px 9px}}
+
+  /* v0.5.2 controls: clear profile actions, compact reactions, community-matched badges */
+  #zab-panel .zab-profile-choose-header{display:flex;flex-direction:column;align-items:flex-start;gap:7px;margin:14px 0 9px}
+  #zab-panel .zab-profile-choose-header label{margin:0;line-height:1.45;overflow-wrap:anywhere}
+  #zab-panel .zab-profile-actions{display:flex;flex-direction:row;align-items:center;gap:7px;width:100%;flex-wrap:nowrap}
+  #zab-panel .zab-profile-actions button{font-size:12px;min-height:32px;flex:0 1 auto;padding:6px 11px;white-space:nowrap}
+  #zab-panel button.zab-setup-card{width:100%;display:flex;gap:11px;align-items:center;text-align:left;padding:15px;margin:0 0 14px;border:1px solid var(--zab-accent);border-radius:13px;background:var(--zab-surface);color:var(--zab-text);box-shadow:0 2px 9px #00000009}
+  #zab-panel .zab-setup-symbol{display:flex;align-items:center;justify-content:center;min-width:39px;height:39px;padding:0 6px;border-radius:11px;background:var(--zab-accent);color:#fff;font-size:13px;font-weight:800}
+  #zab-panel .zab-setup-body{display:flex;flex-direction:column;flex:1;min-width:0;gap:4px}
+  #zab-panel .zab-setup-body strong{font-size:13px}
+  #zab-panel .zab-setup-body>span{font-size:12px;line-height:1.55;color:var(--zab-muted);overflow-wrap:anywhere}
+  #zab-panel .zab-setup-chevron{font-size:24px;line-height:1;color:var(--zab-muted)}
+  #zab-panel button.zab-my-button{flex-shrink:0;min-width:43px;font-weight:800;letter-spacing:.1px;border-color:var(--zab-border);color:var(--zab-accent)}
+  #zab-panel .zab-engagement{display:flex;align-items:center;gap:13px;flex-wrap:wrap;margin-top:12px}
+  #zab-panel .zab-comment-actions{display:flex;align-items:center;gap:14px;margin:5px 0 4px}
+  #zab-panel button.zab-like-inline{display:inline-flex;align-items:center;gap:5px;border:0;background:transparent;box-shadow:none;min-height:28px;padding:2px 3px;color:var(--zab-muted);font-size:12px;font-weight:600}
+  #zab-panel button.zab-like-inline span:first-child{font-size:19px;line-height:1}
+  #zab-panel button.zab-like-inline.is-liked{color:var(--zab-accent)}
+  #zab-panel button.zab-like-inline:hover{background:var(--zab-surface2)}
+  #zab-panel button.zab-text-action{border:0;background:transparent;padding:3px 5px;min-height:28px;color:var(--zab-muted);font-size:12px}
+  #zab-panel .zab-translate-switch{display:flex;align-items:center;gap:2px;justify-content:flex-end;margin:7px 0 12px}
+  #zab-panel .zab-translate-switch button{border:0;background:transparent;min-height:28px;padding:5px 9px;color:var(--zab-muted);border-radius:8px;font-size:12px;font-weight:600}
+  #zab-panel .zab-translate-switch button.is-active{color:var(--zab-text);background:var(--zab-surface2)}
+  #zab-panel .zab-author-me-name,#zab-panel .zab-author-character-name,#zab-panel[data-theme="dark"] .zab-author-me-name,#zab-panel[data-theme="dark"] .zab-author-character-name{color:var(--zab-text);font-weight:750}
+  #zab-panel .zab-author-me,#zab-panel[data-theme="dark"] .zab-author-me{background:var(--zab-accent);color:#fff}
+  #zab-panel .zab-author-character,#zab-panel[data-theme="dark"] .zab-author-character{background:color-mix(in srgb,var(--zab-accent) 15%,var(--zab-surface));color:var(--zab-text);border:1px solid color-mix(in srgb,var(--zab-accent) 36%,var(--zab-border))}
+  @media(max-width:380px){#zab-panel .zab-profile-actions button{padding:6px 9px;font-size:11px}#zab-panel button.zab-setup-card{padding:11px}#zab-panel .zab-setup-symbol{min-width:35px;height:35px}}
   `;document.documentElement.appendChild(style);launcher=document.createElement('button');launcher.type='button';launcher.id='zab-launch';launcher.innerHTML='익명 게시판 <span class="zab-unread"></span>';panel=document.createElement('section');panel.id='zab-panel';panel.hidden=true;panel.innerHTML='<div class="zab-head" id="zab-drag"><strong id="zab-community-title">익명 게시판</strong><button data-act="settings" aria-label="설정" title="설정">⚙️</button><button data-act="close" aria-label="닫기" title="닫기">×</button></div><div class="zab-content" id="zab-main"></div><div class="zab-footer"><span class="zab-status" id="zab-status">채팅방 연결 대기 중</span><button id="zab-cancel" data-act="cancel" hidden>생성 취소</button></div><div class="zab-resize" id="zab-resize">◢</div>';
     document.body.append(launcher,panel);launcher.addEventListener('click',()=>{if(launcher.dataset.dragging==='yes'){launcher.dataset.dragging='';return;}panel.hidden=!panel.hidden;if(!panel.hidden){const b=currentBoard();b.unread=0;saved();render();applySize();}});
     try{window.matchMedia?.('(prefers-color-scheme: dark)').addEventListener?.('change',applyTheme);}catch{}
