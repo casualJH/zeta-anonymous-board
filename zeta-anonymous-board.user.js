@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.9.8
+// @version      0.9.9
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.9.8', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.9.9', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -438,7 +438,7 @@
     if(generated)return generated;
     if(id==='everytime'){
       const school=rpSchoolName();
-      return school?school+' 자유게시판':'게시판';
+      return school?school+' 자유게시판':'자유게시판';
     }
     if(id==='gallery')return '갤러리';
     if(id==='office'){
@@ -446,16 +446,10 @@
         /(?:회사|직장|소속|근무지|재직|기업|회사명)\s*[:：-]?\s*([가-힣A-Za-z0-9]{2,22}(?:그룹|기업|전자|건설|금융|테크|산업|통신|상사|제약|은행|보험|모터스|솔루션|유통|물산|바이오|시스템즈|홀딩스))/,
         /([가-힣A-Za-z0-9]{2,22}(?:그룹|기업|전자|건설|금융|테크|산업|통신|상사|제약|은행|보험|모터스|솔루션|유통|물산|바이오|시스템즈|홀딩스))/
       ]);
-      return company||'우리 회사';
+      return company||'회사 · 익명 게시판';
     }
-    if(id==='reddit')return 'Reddit';
-    if(id==='neighborhood'){
-      const place=worldName([
-        /(?:거주지|주소|동네|지역|사는\s*곳|동네 이름)\s*[:：-]?\s*([가-힣]{2,15}(?:동|읍|면))/,
-        /([가-힣]{2,15}(?:동|읍|면))(?:에|에서|으로|의| 근처| 주민| 거주| 생활)/
-      ]);
-      return place?place+' · 동네 이야기':'우리 동네 이야기';
-    }
+    if(id==='reddit')return 'r/CasualConversation';
+    if(id==='neighborhood')return '우리동네 수다방';
     return currentCommunity().name;
   }
   function communityTopTitle(){return short(data?.settings?.topTitles?.[currentCommunity().id],100)||'익명 게시판';}
@@ -1138,7 +1132,7 @@
     const formats={
       everytime:'Return ONLY the university name that is explicitly present in the provided profiles/world/instructions. Do not invent a university. The script will append " 자유게시판". If none is known, return empty boardTitle.',
       gallery:'Invent a natural Korean DC Inside-style gallery TOPIC based on the world and profiles, not a character name. Return ONLY the topic without " 갤러리"; e.g. 해외 축구, 대학생.',
-      neighborhood:'Invent a natural Korean neighborhood-based NAVER CAFE name, not just a place name. Freely choose the cafe name; "천호동 · 동네 이야기" is just one possible format. Do not claim an unconfirmed real neighborhood exists.',
+      neighborhood:'Invent a natural Korean neighborhood-based NAVER CAFE name, not just a place name. Freely choose the cafe name; "천호동 · 동네 이야기" is just one possible format. Do not claim an unconfirmed real neighborhood exists. The name must sound like a local residents cafe (neighborhood, neighbors, residents, village, apartment, local moms, local chat or community).',
       reddit:'Create an English subreddit TOPIC/name based on the world/profiles. Return ONLY 3-21 ASCII letters, digits or underscores; the script adds r/. Never use character or user names.',
       office:'Return ONLY the company or organization name that is explicitly established in the world/profiles/instructions, without inventing one. If unavailable, return empty boardTitle.',
       blind:'Return empty boardTitle. This community always uses the fixed title "토픽·블라블라".',
@@ -1178,16 +1172,29 @@
       return short(university+' 자유게시판',100);
     }
     if(communityId==='office'){
-      // Reject old Reddit-style titles persisted by earlier builds.
-      if(/^r\//i.test(title)||/^(?:officeworkers?|officeculture|workplace|companytalk)$/i.test(title))return '';
-      const evidence=[...worldTitleTexts(),String(data?.settings?.guide||''),String(data?.settings?.communityGuides?.office||'')].join('\n').toLowerCase();
-      if(!evidence.includes(title.toLowerCase()))return '';
+      // Verify the company/organization is identified in profile/world/instructions, not merely a coincidental word.
+      if(/^(?:officeworkers?|officeculture|workplace|companytalk)$/i.test(title)||/^(?:회사|기업|직장|사무실|조직|우리 회사)$/i.test(title))return '';
+      const sources=[...worldTitleTexts(),String(data?.settings?.guide||''),String(data?.settings?.communityGuides?.office||'')];
+      const suffix=/(?:그룹|기업|전자|건설|금융|테크|산업|통신|상사|제약|은행|보험|모터스|솔루션|유통|물산|바이오|시스템즈|홀딩스|주식회사|Corporation|Corp|Inc|Ltd|Company)/i;
+      const employment=/(?:회사|기업|직장|소속|근무|재직|직원|사원|팀|부서|본사|사옥|company|employer|corporation|office|works? at|employed)/i;
+      const grounded=sources.some(source=>{
+        const text=String(source||''),at=text.toLowerCase().indexOf(title.toLowerCase());
+        if(at<0)return false;
+        const before=text.slice(Math.max(0,at-80),at),after=text.slice(at+title.length,at+title.length+80);
+        return suffix.test(title)||employment.test(before+' '+after);
+      });
+      if(!grounded)return '';
       return title;
     }
     if(communityId==='gallery'){
       title=title.replace(/\s*갤러리$/,'').trim();
       if(!title||identityNames.some(name=>norm(name)===norm(title)))return '';
       return short(title+' 갤러리',100);
+    }
+    if(communityId==='neighborhood'){
+      // Accept flexible names, but require a recognizable local Naver cafe identity.
+      if(!/[가-힣]/.test(title)||!/(?:동네|이웃|주민|마을|맘|수다방|카페|모임|지역|아파트|생활정보|(?:[가-힣]{2,12}(?:동|읍|면)))/.test(title))return '';
+      return title;
     }
     if(communityId==='reddit'){
       const topic=title.replace(/^r\//i,'').trim();
