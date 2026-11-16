@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.6.0
+// @version      0.6.1
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.6.0', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.6.1', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1569,6 +1569,7 @@
   /* v0.5.7: stronger title/body weight contrast; compact sorting tabs */
   #zab-panel .zab-card h3{font-weight:800}
   #zab-panel .zab-card .excerpt{font-weight:400}
+  #zab-panel[data-theme="dark"] .zab-card .excerpt{color:#B5B6BE}
   #zab-panel .zab-section>h2{font-weight:800}
   #zab-panel .zab-section>h2+p{font-weight:400}
   #zab-panel .zab-sort-switch{display:flex;align-items:center;gap:2px;flex-wrap:nowrap}
