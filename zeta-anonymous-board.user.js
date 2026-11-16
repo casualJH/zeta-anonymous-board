@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.4.4
+// @version      0.4.5
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.4.4', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.4.5', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1070,7 +1070,7 @@
     const instructions=`선택된 RP 캐릭터가 공개적으로 직접 커뮤니티 활동을 할 법한 상황에서는 그 캐릭터의 게시글·댓글·대댓글을 포함할 수 있다. 캐릭터가 직접 작성한 경우 characterProfileId에 [수집된 프로필].selectedCharacters에 포함된 캐릭터의 정확한 프로필 id 또는 _key를 넣어라. 일반 주민은 이 필드를 빈 문자열로 두어라. 실제로 작성하지 않은 캐릭터를 사칭하지 말고 캐릭터 실명을 닉네임으로 노출하지 마라. 당신은 가상의 RP 세계에 실제 거주하는 익명 커뮤니티 운영 시뮬레이터다. 관찰자·독자가 아니라 세계관 주민의 입장에서 작성하라. 공개적으로 목격·전달될 수 있는 사건만 목격 사실로 쓰고, 비밀 대화·내면·보이지 않는 사적 행동을 누설하지 마라. 소문은 반드시 소문/추측으로 표현하라. RP 주인공에 관한 글과 주민들의 독립적인 일상을 자연스럽게 섞고, 주어진 세계관의 주요 사실을 바꾸지 않는 선에서 새로운 회사·가게·지역·주민 등 배경 요소 창작은 허용한다. 기존 주민 ID는 재사용 가능하며 새로운 주민을 만들어도 된다. 사용자 글과 댓글은 삭제·수정하지 마라. 기존 사용자 댓글에 관련성 있는 AI 답글을 적절히 달고, 이미 AI가 답한 댓글에는 같은 내용의 답글을 반복하지 마라. 글과 댓글의 닉네임은 해당 커뮤니티에 맞게 만들고, 대댓글은 최대 한 단계. 출력은 반드시 JSON 객체 하나이며 Markdown 코드펜스는 제외.`;
     const schema=`JSON 형태: {"posts":[{"title":"제목 원문","titleKo":"제목 한국어 번역","body":"본문 원문","bodyKo":"본문 한국어 번역","company":"소속 회사명(블라인드)","nick":"회사명 · 익명 별명(블라인드)","characterProfileId":"RP 캐릭터 본인인 경우에만 선택된 캐릭터의 프로필 id 또는 _key, 일반 주민이면 빈 문자열","residentId":"재사용할 주민 ID 또는 새 주민용 임의 별칭","views":10,"likes":2,"comments":[{"company":"소속 회사명(블라인드)","nick":"회사명 · 익명 별명(블라인드)","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"댓글 원문","textKo":"댓글 한국어 번역","likes":1,"replies":[{"company":"소속 회사명(블라인드)","nick":"회사명 · 익명 별명(블라인드)","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"대댓글 원문","textKo":"대댓글 한국어 번역","likes":0}]}]}],"updates":[{"postId":"과거 게시글 ID","comments":[{"company":"소속 회사명(블라인드)","nick":"회사명 · 익명 별명(블라인드)","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"추가 댓글 원문","textKo":"추가 댓글 한국어 번역","likes":0,"replies":[]}],"replies":[{"parentCommentId":"기존 사용자 댓글 ID","company":"소속 회사명(블라인드)","nick":"회사명 · 익명 별명(블라인드)","characterProfileId":"RP 캐릭터 본인의 글이면 프로필 id 또는 _key, 아니면 빈 문자열","residentId":"임의 별칭","text":"사용자 댓글에 대한 대댓글 원문","textKo":"대댓글 한국어 번역","likes":0}]}]}. 원본에 없는 postId는 사용 금지.`;
     const translationRule=translationOn()?'[번역 ON] 영어 원문 등 해당 커뮤니티에 자연스러운 원문 언어로 먼저 작성하라. 원문 제목·본문·댓글·대댓글은 각각 title/body/text에 넣고, 같은 내용의 자연스럽고 충실한 한국어 번역을 titleKo/bodyKo/textKo에 함께 넣어라. Reddit에서는 영어 원문을 우선 생성하고 영어 인터넷 특유의 표현과 말투를 유지한다. 한국어 번역은 원문 의미를 누락하거나 창작하지 말고 대응시켜라. 모든 AI 신규/추가 댓글/대댓글에 번역 필드를 제공하라. 사용자 원문을 수정하거나 번역하여 다시 내보내지 마라.':'[번역 OFF] 원래 커뮤니티에 어울리는 언어와 말투로 작성하고 한국어 번역 필드는 생략하거나 빈 문자열로 둬라.';
-    const userLanguageRule='[사용자 작성글 언어 해석 · 모든 커뮤니티 공통] 사용자가 직접 작성한 게시글, 댓글, 대댓글은 입력한 언어와 관계없이 이 커뮤니티에서 주민들이 평소 사용하는 기본 언어로 자연스럽게 작성한 발언으로 간주하라. 그 글을 읽은 주민과 RP 캐릭터는 그 언어로 소통한 것처럼 의미, 분위기, 농담, 어조를 이해하고 해당 커뮤니티의 언어와 문화에 맞춰 자연스럽게 반응하라. Reddit에서는 사용자 한국어 발언도 의미상 자연스러운 영어 Reddit 발언으로 이해하고 영어로 답변하라. 다른 커뮤니티에도 같은 규칙을 적용하되, 실제 커뮤니티에 적합한 언어를 사용하라. 사용자에게 표시되는 원본 게시글, 댓글, 대댓글의 텍스트는 절대 번역하거나 바꾸지 말고 원문 그대로 보존하라. 사용자가 입력한 언어가 다르다는 점을 굳이 지적하거나 언급하지 마라.';
+    const userLanguageRule='[사용자 작성글 언어 해석 · 모든 커뮤니티 공통] 사용자가 직접 작성한 게시글·댓글·대댓글은 입력 언어와 관계없이 해당 커뮤니티의 기본 언어로 작성된 발언으로 간주하라. 주민과 RP 캐릭터는 해당 커뮤니티의 기본 언어로 된 발언을 읽은 것처럼 의미와 어조를 이해하고 자연스럽게 반응하라. 답변은 해당 커뮤니티의 언어와 말투를 따르라. 사용자 원문은 수정하지 않고 그대로 보존하라. 입력 언어가 다르다는 이유로 언어 차이를 지적하지 마라.';
     const task=kind==='react'?`아래 사용자 게시글/댓글을 대상으로 AI 주민의 반응만 생성. 새 게시글은 0개. 대상 글 ID=${post?.id||''}. 이전 글 중 해당 글에만 댓글 또는 기존 사용자 댓글에 대한 대댓글을 추가.`:`새 게시글 ${num(s.posts,1,15,3)}개를 목표로 생성하라. 새 게시글당 댓글 최대 ${num(s.newComments,0,30,7)}개. 기존 최근 ${num(s.oldPostWindow,0,300,20)}개 글 중 내용 관련성이 높은 글에만 추가 댓글을 작성하되, 모든 기존 글에 추가되는 댓글·대댓글 총합은 ${num(s.oldComments,0,100,10)}개 이하. 특히 관련성 있는 기존 사용자 댓글(source=user)을 확인해 해당 댓글 ID로 replies를 작성하라. ${s.quiet==='skip'?'공개 사건이 전혀 없다면 게시글과 댓글 생성 생략':s.quiet==='rumors'?'새 사건이 없으면 기존 소문만 이어가기':'새 사건이 없으면 세계관 주민 일상 글 작성'}.`;
     return `${instructions}\n${userLanguageRule}\n[번역 출력 규칙] ${translationRule}\n[사용자 지정 커뮤니티 지침] ${customStyle}\n[커뮤니티별 작성 규칙] ${communityRules}\n[닉네임 필수 규칙] ${nicknameRule}\n${schema}\n[작업] ${task}\n[커뮤니티] ${JSON.stringify(community)}\n[커뮤니티별 생성 지침] ${short(s.guide,5000)}\n[수집된 프로필] ${JSON.stringify({user:short(s.profiles.user,5000),characters:short(s.profiles.characters,9000),world:short(s.profiles.world,6500),selectedCharacters:profileSelection().characters.slice(0,30),selectedUser:profileSelection().user})}\n[최근 RP 대화 (개인정보 및 비공개 사실은 주민에게 직접 노출 금지)] ${JSON.stringify(recent).slice(0,20000)}\n[기존 주민] ${JSON.stringify(residents).slice(0,7500)}\n[최근 커뮤니티 게시글] ${JSON.stringify(older).slice(0,14000)}\n[사용자 반응 대상] ${JSON.stringify(post||{}).slice(0,5000)}\nJSON 객체만 답하라.`;
   }
