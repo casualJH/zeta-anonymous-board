@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.9.17
+// @version      0.10.0
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.9.17', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.10.0', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -123,7 +123,7 @@
   let busy=null,pending=null,turnCount=0,activeTurnKey='',activeTurnHash='',lastTurnKeys=[],baselineReady=false,autoTimer=null,latestTimer=null,loadBusy=false,lastLiveSync=0,runEpoch=0,pendingAutoCheck=null;
   let seenTurnIds=new Set(),lastTurnTime=0,autoRetryTimer=null,autoWaitUntil=0,autoStage='',turnEvents=0;
   let profileCollectionActive=false, profileDraftSelection={userId:'',characterIds:[]};
-  let profileCache={characters:[],users:[],plot:null}, profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''}, profileInfo='프로필 연결 대기 중', profileRequestRoom='', profileWaitTimer=null,profileAttempt=0, captured=null, networkRoom='',roomMarker='';
+  let profileCache={characters:[],users:[],plot:null}, profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''}, profileInfo='프로필 연결 대기 중', profileRequestRoom='', profileWaitTimer=null,profileAttempt=0,profileAutoRetryTimer=null,profileAutoAttempt=0,captured=null, networkRoom='',roomMarker='';
   const page=typeof unsafeWindow!=='undefined'?unsafeWindow:window;
   const bridgeId='zab-'+Math.random().toString(36).slice(2);
   let bridgeInstallError='';
@@ -359,7 +359,7 @@
   }
   installBridge();
   function bridge(action,requestId=''){window.postMessage({tag:'zab-control',channel:bridgeId,action,requestId},'*');}
-  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);clearTimeout(autoRetryTimer);autoRetryTimer=null;autoWaitUntil=0;autoStage='';pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];seenTurnIds=new Set();lastTurnTime=0;turnEvents=0;completedTurnTotal=null;lastTurnAnchor='';turnMessagesSeen=0;turnStatusError='';turnPages=0;turnLoading=false;turnLoadCount=0;baselineReady=false;independentProfileCollector.roomChanged();room=id;postsView='list';detailId='';profilePanelOpen=false;settingsOpen=false;settingTab='basic';profileSectionOpen=true;communityDraft=null;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='저장된 프로필 확인 중';profileRequestRoom='';profileCollectionActive=false;profileDraftSelection={userId:'',characterIds:[]};try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};globalPreferences=readGlobalPreferences();applyGlobalPreferences();migrateCommunityGuides(data.settings);data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};
+  async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);clearTimeout(autoRetryTimer);autoRetryTimer=null;autoWaitUntil=0;autoStage='';pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];seenTurnIds=new Set();lastTurnTime=0;turnEvents=0;completedTurnTotal=null;lastTurnAnchor='';turnMessagesSeen=0;turnStatusError='';turnPages=0;turnLoading=false;turnLoadCount=0;baselineReady=false;independentProfileCollector.roomChanged();clearTimeout(profileAutoRetryTimer);profileAutoRetryTimer=null;profileAutoAttempt=0;room=id;postsView='list';detailId='';profilePanelOpen=false;settingsOpen=false;settingTab='basic';profileSectionOpen=true;communityDraft=null;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='저장된 프로필 확인 중';profileRequestRoom='';profileCollectionActive=false;profileDraftSelection={userId:'',characterIds:[]};try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};globalPreferences=readGlobalPreferences();applyGlobalPreferences();migrateCommunityGuides(data.settings);data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};
     if(!data.settings.communityConfirmV043)data.settings.communityConfirmed=false;
     // Only a confirmed snapshot may be used after a reload. Old versions stored IDs
     // but not source content, so those users must import and save once.
@@ -370,17 +370,39 @@
       profileDraftSelection={userId:profileKey(storedUser),characterIds:storedChars.map(profileKey)};
       profileInfo='저장된 프로필 불러옴 · 자동 재감지 안 함';
     }else{profileInfo='저장된 프로필 없음';}
-    if(!data.settings.fallbackPreferenceV014){if(!data.settings.fallback)data.settings.fallback='gemini-3.1-flash-lite';data.settings.fallbackPreferenceV014=true;saved();}if(['apartment','dating'].includes(data.settings.selected))data.settings.selected='everytime';render();setTimeout(()=>{if(room!==id)return;bridge('state');bridge('latest');profileRequestRoom=id;},650);}
+    if(!data.settings.fallbackPreferenceV014){if(!data.settings.fallback)data.settings.fallback='gemini-3.1-flash-lite';data.settings.fallbackPreferenceV014=true;saved();}if(['apartment','dating'].includes(data.settings.selected))data.settings.selected='everytime';render();if(!profileReady())requestProfiles(true);setTimeout(()=>{if(room!==id)return;bridge('state');bridge('latest');profileRequestRoom=id;},650);}
   function endProfileLoading(message){
     clearTimeout(profileWaitTimer);profileWaitTimer=null;
     profileInfo=message;
     updateProfileStatus();
     if(settingsOpen&&settingTab==='community'&&profileSectionOpen)render();
   }
-  function requestProfiles(){
+  // When a room has no saved profiles, begin collecting immediately. Retry only
+  // while credentials are still arriving or a required profile is missing.
+  function stopAutoProfileRetry(){
+    clearTimeout(profileAutoRetryTimer);profileAutoRetryTimer=null;profileAutoAttempt=0;
+  }
+  function scheduleAutoProfileRetry(forRoom,attempt){
+    if(room!==forRoom||!data||profileReady()||!profileCollectionActive)return;
+    if(profileCache.users.length&&profileCache.characters.length)return;
+    if(attempt>=12)return; // Bounded retry window; manual refresh remains available.
+    clearTimeout(profileAutoRetryTimer);
+    profileAutoRetryTimer=setTimeout(async()=>{
+      profileAutoRetryTimer=null;
+      if(room!==forRoom||!data||profileReady()||!profileCollectionActive)return;
+      if(profileCache.users.length&&profileCache.characters.length)return;
+      profileAutoAttempt=attempt+1;
+      try{await independentProfileCollector.refresh();}
+      catch(e){console.warn('[제타 익명 게시판] 자동 프로필 재시도 실패:',e);}
+      if(room===forRoom&&profileAutoAttempt===attempt+1)scheduleAutoProfileRetry(forRoom,attempt+1);
+    },2500);
+  }
+  function requestProfiles(automatic=false){
     if(!room)return show('제타 채팅방을 먼저 열어 주세요.');
     if(profileCollectionActive&&profileWaitTimer)return show('프로필 불러오기가 이미 진행 중이에요.');
-    if(data?.settings.savedProfiles&&!confirm('제타에서 프로필을 다시 불러올까요?\n저장된 프로필은 저장 버튼을 누르기 전까지 변경되지 않습니다.'))return;
+    if(automatic&&profileReady())return;
+    if(!automatic&&data?.settings.savedProfiles&&!confirm('제타에서 프로필을 다시 불러올까요?\n저장된 프로필은 저장 버튼을 누르기 전까지 변경되지 않습니다.'))return;
+    stopAutoProfileRetry();
     profileCollectionActive=true;
     profileCache={characters:[],users:[],plot:null};
     profileDraftSelection={userId:'',characterIds:[]};
@@ -397,6 +419,7 @@
       endProfileLoading(count?'확인 완료 · 수집된 프로필 '+count+'개 (추가 응답 없음)':'프로필을 불러오지 못했다면 아래 방법 중 하나를 시도해 주세요.\n- 채팅방 목록으로 나갔다가 다시 들어오기\n- 채팅창 상단의 플롯명을 눌렀다가 채팅창으로 돌아오기');
     },10000);
     independentProfileCollector.refresh();
+    if(automatic)scheduleAutoProfileRetry(forRoom,0);
   }
   function currentBoard(){if(!data)return blankBoard();const id=data.settings.selected;if(!data.boards[id])data.boards[id]=blankBoard();return data.boards[id];}
   function currentCommunity(){return [...presets,...safeArray(data?.settings.custom)].find(x=>x.id===data?.settings.selected)||presets[0];}
@@ -900,14 +923,14 @@
     const clean=p=>({id:short(p.id,120),name:short(p.name,160),description:short(p.description,16000),_key:profileKey(p)});
     data.settings.savedProfiles={user:clean(user),characters:chars.map(clean),savedAt:now()};
     data.settings.profileSelection={userId:profileKey(user),characterIds:chars.map(profileKey)};
-    profileCollectionActive=false;
+    profileCollectionActive=false;stopAutoProfileRetry();
     clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;
     runEpoch++;invalidatePending('');turnCount=0;
     profileInfo='프로필 저장 완료 · 자동 재감지 안 함';
     profileSectionOpen=false;saved();render();show('프로필 저장 완료 · 이어서 커뮤니티를 확인해 주세요.');
   }
   function discardProfileDraft(){
-    profileCollectionActive=false;clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;
+    profileCollectionActive=false;stopAutoProfileRetry();clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;
     const saved=data?.settings.savedProfiles;
     profileCache=saved?.user?{users:[copy(saved.user)],characters:copy(safeArray(saved.characters)),plot:null}:{users:[],characters:[],plot:null};
     profileDraftSelection=saved?.user?{userId:profileKey(saved.user),characterIds:safeArray(saved.characters).map(profileKey)}:{userId:'',characterIds:[]};
