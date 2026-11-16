@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.8.8
+// @version      0.8.9
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.8.8', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.8.9', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1715,9 +1715,6 @@
   #zab-panel .zab-divider{background:var(--zab-border);margin:14px 0}
   #zab-panel input:not([type=checkbox]),#zab-panel select,#zab-panel textarea{background:var(--zab-surface);color:var(--zab-text);border-color:var(--zab-border);border-radius:10px;min-height:39px;padding:10px}
   #zab-panel input::placeholder,#zab-panel textarea::placeholder{color:var(--zab-muted);opacity:.8}
-  /* Character description guidance only; real input text keeps the normal foreground. */
-  #zab-panel textarea[data-profile-edit="character"][data-profile-field="description"]::placeholder{color:#A0A0A0;opacity:1}
-  #zab-panel[data-theme="dark"] textarea[data-profile-edit="character"][data-profile-field="description"]::placeholder{color:#85858F;opacity:1}
   #zab-panel label.zab-profile-choice{background:var(--zab-surface2);border-color:var(--zab-border);border-radius:10px;padding:10px}
   #zab-panel .zab-profile-choice small{color:var(--zab-muted)}
   #zab-panel .zab-comment{padding:12px 0;border-color:var(--zab-border)}
