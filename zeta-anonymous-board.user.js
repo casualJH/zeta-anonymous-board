@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.6.11
+// @version      0.6.12
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.6.11', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.6.12', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1251,13 +1251,20 @@
       }
     }
     let nick=short(existing||rawNick,60);
-    const noDot=/(?:[·ㆍ].{0,25}(?:포함하지|없이|금지|제외|넣지|쓰지|사용하지)|(?:별명|닉네임)만\s*(?:사용|표시)|(?:회사명|부서명|팀명).{0,22}(?:빼|없이|제외|붙이지))/.test(rule);
+    const noDot=/(?:[·ㆍ].{0,25}(?:포함하지|포함되지|포함하지\s*않|없이|금지|제외|넣지|쓰지|사용하지)|(?:별명|닉네임)만\s*(?:사용|표시)|(?:회사명|부서명|팀명).{0,22}(?:빼|없이|제외|붙이지))/.test(rule);
     const numeric=/익명\s*(?:\+|뒤에|과|및)?\s*숫자\s*(\d{1,2})\s*자리/.exec(rule);
     if(numeric){
       const digits=Math.min(10,Math.max(1,Number(numeric[1])));
       return '익명'+String(hashLabel('guide:'+room+':'+currentCommunity().id+':'+seed)%10**digits).padStart(digits,'0');
     }
     if(noDot)nick=nick.split(/\s*[·ㆍ]\s*/).pop().trim();
+    if(/(?:u\/username|u\/핸들|u\/영문|u\/아이디)/i.test(rule)){
+      const stem=nick.replace(/^u\//,'').replace(/[^A-Za-z0-9_-]/g,'');
+      nick='u/'+(stem.length>=3?stem.slice(0,28):platformAlias('reddit',seed));
+    }else if(/(?:@username|@핸들|@아이디|@영문)/i.test(rule)){
+      const stem=nick.replace(/^@/,'').replace(/[^A-Za-z0-9_]/g,'');
+      nick='@'+(stem.length>=2?stem.slice(0,15):platformAlias('x',seed).slice(0,15));
+    }
     if(!nick||genericPlatformNames.test(nick)||isRpRealName(nick))nick=platformAlias('office',seed);
     if(/(?:팀\/부서명|부서명|팀명).{0,12}[·ㆍ].{0,12}(?:별명|닉네임)/.test(rule)&&!nick.includes(' · '))
       nick=(user?userOfficeDepartment():'부서미상')+' · '+nick;
