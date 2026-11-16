@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.6.9
+// @version      0.6.10
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.6.9', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.6.10', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1391,13 +1391,13 @@
     if(!data||!confirm('현재 채팅방의 ['+currentCommunity().name+'] 게시글·댓글·주민 기록을 삭제할까요? 다른 커뮤니티와 프로필·설정·API 키는 유지됩니다.'))return;
     prepareReset();
     data.boards[data.settings.selected]=blankBoard();
-    saved();render();show('현재 채팅방의 선택한 커뮤니티를 초기화했어요.');
+    saved();render();show('현재 커뮤니티를 초기화했어요.');
   }
   function resetRoomCommunities(){
     if(!data||!confirm('현재 채팅방의 모든 커뮤니티 게시글·댓글·주민 기록을 삭제할까요? 다른 채팅방과 현재 프로필·설정·API 키는 유지됩니다.'))return;
     prepareReset();
     data.boards={};
-    saved();render();show('현재 채팅방의 모든 커뮤니티를 초기화했어요.');
+    saved();render();show('현재 채팅방을 초기화했어요.');
   }
   async function resetAllChatRooms(){
     if(!data||!room||!confirm('모든 채팅방의 게시판 기록, 커뮤니티 설정, 저장된 프로필 및 닉네임을 전부 삭제할까요? Gemini API 키는 유지됩니다. 복구하려면 기존 JSON 백업이 필요합니다.'))return;
@@ -1817,11 +1817,11 @@
   settingTab==='people'?`<h4>내 닉네임</h4>${settingsSegment('userNickMode',[['auto','커뮤니티별 자동 부여'],['custom','직접 설정']],'내 닉네임 설정')}<label>직접 사용할 닉네임</label>${inp('userNick',s.userNick)}<p class="zab-note">자동 닉네임은 커뮤니티별 규칙에 맞춰 서로 구분되는 익명 별명을 적용합니다(블라인드 회사명 · 별명 / X @핸들 / Reddit u/핸들 / 에브리타임 익명번호). 직접 입력한 별명은 우선 적용되며 기존 글·댓글은 유지됩니다.</p><div class="zab-divider"></div><h4>고정 주민 닉네임 수정</h4>${Object.values(currentBoard().residents).length?Object.values(currentBoard().residents).map(r=>`<div class="zab-flex"><span style="font-size:11px;max-width:100px;overflow-wrap:anywhere">${esc(r.id)}</span><input data-resident="${esc(r.id)}" value="${esc(r.nick)}" maxlength="60"></div>`).join(''):'<p class="zab-note">아직 등장한 고정 주민이 없어요.</p>'}<p class="zab-note">수정한 이름은 새 활동부터 적용되고 과거 게시글 표시는 유지돼요.</p>`:
   settingTab==='api'?`<h4>API 설정</h4><label>Gemini API 키</label><div class="zab-row"><input id="zab-api-key" type="password" placeholder="키 입력 후 저장" style="flex:1;min-width:100px" autocomplete="off">${btn('save-key','키 저장')}</div><p class="zab-note">키는 Tampermonkey 저장소에만 보관하며 JSON 백업에 포함하지 않아요.</p><label>Gemini 모델</label>${modelSelection()}<div class="zab-row">${btn('models','모델 목록 불러오기')}</div>`:
   `<h4>데이터 관리</h4><div class="zab-row">${btn('export','JSON 내보내기','zab-primary')}${btn('import','JSON 가져오기')}</div><input type="file" id="zab-import-file" accept="application/json,.json" hidden><p class="zab-note">가져오기할 때 덮어쓰기와 합치기 중 선택합니다. Gemini API 키는 제외됩니다.</p><div class="zab-divider"></div><h4>초기화</h4>
-    <div class="zab-row">${btn('reset-community','현재 채팅방 초기화','zab-danger')}
-    ${btn('reset-room-communities','모든 커뮤니티 초기화','zab-danger')}
+    <div class="zab-row">${btn('reset-community','현재 커뮤니티 초기화','zab-danger')}
+    ${btn('reset-room-communities','현재 채팅방 초기화','zab-danger')}
     ${btn('reset-all-chatrooms','모든 채팅방 초기화','zab-danger')}</div>
-    <p class="zab-note">현재 채팅방 초기화: 현재 채팅방의 선택한 커뮤니티만 초기화합니다.</p>
-    <p class="zab-note">모든 커뮤니티 초기화: 현재 채팅방의 모든 커뮤니티 기록을 삭제합니다. 설정과 프로필은 유지됩니다.</p>
+    <p class="zab-note">현재 커뮤니티 초기화: 현재 채팅방의 선택한 커뮤니티 기록만 삭제합니다. 다른 커뮤니티와 설정은 유지됩니다.</p>
+    <p class="zab-note">현재 채팅방 초기화: 현재 채팅방의 모든 커뮤니티 기록을 삭제합니다. 설정과 프로필은 유지됩니다.</p>
     <p class="zab-note">모든 채팅방 초기화: 저장된 모든 채팅방의 게시판 데이터·설정·프로필을 삭제합니다.</p>
     <p class="zab-note"><b>세 가지 모두 Gemini API 키는 삭제하지 않습니다.</b> 삭제 전에 JSON 백업을 권장합니다.</p>`}</div>`;}
   async function onClick(e){const b=e.target.closest('button[data-act]');if(!b){const card=e.target.closest('[data-open]');if(card){detailId=card.dataset.open;const board=currentBoard();if(!board.seen||typeof board.seen!=='object')board.seen={};markRead(detailId);postsView='detail';render();}return;}const a=b.dataset.act;if(a==='close'){panel.hidden=true;return;}if(a.startsWith('setting-segment:')){if(!data)return;const parts=a.slice('setting-segment:'.length).split(':');const name=parts[0],value=parts[1];const allowed=name==='quiet'?['daily','skip','rumors']:name==='userNickMode'?['auto','custom']:[];if(!allowed.includes(value))return;data.settings[name]=value;saveSettings();return;}if(a.startsWith('time-mode:')){if(!data)return;const mode=a.slice(10);if(!['real','rp'].includes(mode))return;data.settings.timeMode=mode;saveSettings();return;}if(a.startsWith('theme:')){const mode=a.slice(6);if(!['system','light','dark'].includes(mode))return;themeMode=mode;try{GM_setValue('zab-theme-mode',themeMode);}catch{}render();return;}if(a==='profiles-panel'||a==='setup-profile'){settingsOpen=true;if(!communityDraft)startCommunityDraft();profilePanelOpen=false;settingTab='community';profileSectionOpen=true;render();return;}if(a==='setup-community'||a==='pick-community'){settingsOpen=true;if(!communityDraft)startCommunityDraft();settingTab='community';profileSectionOpen=false;render();return;}if(a==='toggle-profile-section'){profileSectionOpen=!profileSectionOpen;render();return;}if(a==='confirm-community'){confirmCommunityDraft();return;}if(a.startsWith('choose-community:')){const id=a.slice('choose-community:'.length);if(id!=='__new_custom__'&&![...presets,...safeArray(data.settings.custom)].some(c=>c.id===id))return;selectCommunityDraft(id);return;}if(a==='settings'){profilePanelOpen=false;settingsOpen=!settingsOpen;if(settingsOpen)startCommunityDraft();else communityDraft=null;render();return;}if(a==='settings-back'){settingsOpen=false;communityDraft=null;render();return;}if(a.startsWith('tab:')){settingTab=a.slice(4);if(settingTab==='community'&&!communityDraft)startCommunityDraft();render();if(settingTab==='basic')updateProfileStatus();return;}if(a==='write'){postsView='write';render();return;}if(a==='back'){postsView='list';render();return;}if(a==='publish'){makeOwnPost(panel.querySelector('#zab-own-title')?.value||'',panel.querySelector('#zab-own-body')?.value||'');return;}if(a==='generate')return generate('manual');if(a==='regen')return generate('regenerate');if(a==='cancel'){cancelBusy();show('생성을 취소했어요. 0턴부터 시작합니다.');return;}if(a==='sort-recent'||a==='sort-popular'||a==='sort-unread'){currentBoard().sort=a==='sort-recent'?'recent':a==='sort-popular'?'popular':'unread';saved();render();return;}if(a.startsWith('like:')){const parts=a.slice(5).split(':');toggleLike(parts[0],parts[1]);return;}if(a==='translation-original'||a==='translation-ko'){currentBoard().translationView=a==='translation-ko'?'ko':'original';saved();render();return;}if(a==='delete')return deletePost(detailId);if(a==='send-comment'){addOwnComment(detailId,'',panel.querySelector('#zab-comment-text')?.value||'');return;}if(a.startsWith('reply:')){
