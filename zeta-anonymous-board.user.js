@@ -309,6 +309,7 @@
   installBridge();
   function bridge(action,requestId=''){window.postMessage({tag:'zab-control',channel:bridgeId,action,requestId},'*');}
   async function setRoom(id){if(!id||!UUID.test(id)||id===room)return;cancelBusy(false);clearTimeout(autoTimer);clearTimeout(latestTimer);clearTimeout(autoRetryTimer);autoRetryTimer=null;autoWaitUntil=0;autoStage='';pendingAutoCheck=null;runEpoch++;turnCount=0;activeTurnKey='';activeTurnHash='';lastTurnKeys=[];seenTurnIds=new Set();lastTurnTime=0;turnEvents=0;completedTurnTotal=null;lastTurnAnchor='';turnMessagesSeen=0;turnStatusError='';turnPages=0;turnLoading=false;turnLoadCount=0;baselineReady=false;independentProfileCollector.roomChanged();room=id;postsView='list';detailId='';profilePanelOpen=false;settingsOpen=false;settingTab='basic';profileSectionOpen=true;communityDraft=null;profileCache={characters:[],users:[],plot:null};profileDetection={seen:0,paths:new Set(),lastPath:'',apiError:''};clearTimeout(profileWaitTimer);profileWaitTimer=null;profileAttempt++;profileInfo='저장된 프로필 확인 중';profileRequestRoom='';profileCollectionActive=false;profileDraftSelection={userId:'',characterIds:[]};try{data=await readRoom(id)||blankRoom(id);}catch(e){data=blankRoom(id);alert('저장소를 읽지 못해 임시 데이터로 시작합니다: '+e);}if(room!==id)return;data.settings={...defaults(),...data.settings};data.settings.profiles={...defaults().profiles,...data.settings.profiles};data.settings.profileSelection={userId:String(data.settings.profileSelection?.userId||''),characterIds:safeArray(data.settings.profileSelection?.characterIds).map(String)};
+    if(!data.settings.communityConfirmV043)data.settings.communityConfirmed=false;
     // Only a confirmed snapshot may be used after a reload. Old versions stored IDs
     // but not source content, so those users must import and save once.
     const snapshot=data.settings.savedProfiles;
@@ -958,7 +959,7 @@
     s.translationEnabled=s.translationEnabled&&typeof s.translationEnabled==='object'?s.translationEnabled:{};
     s.translationEnabled[id]=!!d.translate;
     if(id!==s.selected)communityChange(id);
-    s.communityConfirmed=true;
+    s.communityConfirmed=true;s.communityConfirmV043=true;
     communityDraft=null;saved();render();show('커뮤니티 설정을 저장했어요.');
   }
   function toggleAuto(on){if(!data)return;invalidatePending('');runEpoch++;turnCount=0;data.settings.auto=on;saveSettings();show('자동 갱신 '+(on?'ON':'OFF')+' · 0턴부터 시작');}
@@ -1432,7 +1433,7 @@
     <label>말투 예시 (선택사항)</label><textarea data-community-field="example" rows="3">${esc(communityDraft.custom.example)}</textarea>
   `:`
     <label>게시판 이름</label><input data-community-title="yes" maxlength="100" value="${esc(communityDraft?.title??s.boardTitles?.[s.selected]??'')}" placeholder="자동 제목 사용">
-    <label class="zab-profile-choice"><input type="checkbox" data-community-translate="yes" ${communityDraft?.translate?'checked':''}> 한국어 번역 옵션 (원문/번역 전환)</label>
+    <label class="zab-profile-choice"><input type="checkbox" data-community-translate="yes" ${(communityDraft?communityDraft.translate:translationFor(s.selected))?'checked':''}> 한국어 번역 옵션 (원문/번역 전환)</label>
     <p class="zab-note">한국어 번역 옵션을 활성화하면 추가 출력 토큰이 사용될 수 있습니다.</p>
   `}
   <p class="zab-note">커뮤니티를 변경해도 게시글·주민 기록은 보존됩니다.</p>
