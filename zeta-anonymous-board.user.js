@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.9.9
+// @version      0.9.10
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.9.9', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.9.10', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -408,24 +408,6 @@
       snapshot.user?.description,...safeArray(snapshot.characters).map(p=>p.description)]
       .filter(v=>typeof v==='string'&&v.trim()).map(String);
   }
-  function worldName(patterns){
-    for(const text of worldTitleTexts())for(const pattern of patterns){
-      const match=pattern.exec(text);if(match?.[1])return short(match[1],45);
-    }
-    return '';
-  }
-  function rpSchoolName(){
-    // Only THIS room's saved world/user/character profile text is trusted.
-    const names=new Set();
-    for(const source of worldTitleTexts()){
-      for(const m of String(source).matchAll(/(?:^|[^가-힣A-Za-z0-9])([가-힣A-Za-z0-9]{2,18})\s*(대학교|대학)(?=\s|[가-힣\p{P}]|$)/gu)){
-        if(['한국','우리','다른','전국','일반','모든','유명','명문','국내'].includes(m[1]))continue;
-        names.add(m[1]+m[2]);
-      }
-    }
-    // Conflicting schools mean no reliable center; use the default title.
-    return names.size===1?[...names][0]:'';
-  }
   // Reddit's r/ prefix must never appear in any other community, including legacy saved titles.
   function manualBoardTitle(id){const title=short(data?.settings?.boardTitles?.[id],100);return id!=='reddit'&&/^r\//i.test(title)?'':title;}
   function communityBoardTitle(){
@@ -436,18 +418,9 @@
     if(id==='x')return '타임라인';
     const generated=validatedBoardTitle(currentBoard().generatedTitle,id);
     if(generated)return generated;
-    if(id==='everytime'){
-      const school=rpSchoolName();
-      return school?school+' 자유게시판':'자유게시판';
-    }
+    if(id==='everytime')return '자유게시판';
     if(id==='gallery')return '갤러리';
-    if(id==='office'){
-      const company=worldName([
-        /(?:회사|직장|소속|근무지|재직|기업|회사명)\s*[:：-]?\s*([가-힣A-Za-z0-9]{2,22}(?:그룹|기업|전자|건설|금융|테크|산업|통신|상사|제약|은행|보험|모터스|솔루션|유통|물산|바이오|시스템즈|홀딩스))/,
-        /([가-힣A-Za-z0-9]{2,22}(?:그룹|기업|전자|건설|금융|테크|산업|통신|상사|제약|은행|보험|모터스|솔루션|유통|물산|바이오|시스템즈|홀딩스))/
-      ]);
-      return company||'회사 · 익명 게시판';
-    }
+    if(id==='office')return '회사 · 익명 게시판';
     if(id==='reddit')return 'r/CasualConversation';
     if(id==='neighborhood')return '우리동네 수다방';
     return currentCommunity().name;
