@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.9.7
+// @version      0.9.8
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.9.7', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.9.8', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -426,10 +426,12 @@
     // Conflicting schools mean no reliable center; use the default title.
     return names.size===1?[...names][0]:'';
   }
+  // Reddit's r/ prefix must never appear in any other community, including legacy saved titles.
+  function manualBoardTitle(id){const title=short(data?.settings?.boardTitles?.[id],100);return id!=='reddit'&&/^r\//i.test(title)?'':title;}
   function communityBoardTitle(){
     const id=currentCommunity().id;
-    const manual=short(data?.settings?.boardTitles?.[id],100);
-    if(manual&&!(id==='office'&&/^r\//i.test(manual)))return manual;
+    const manual=manualBoardTitle(id);
+    if(manual)return manual;
     if(id==='blind')return '토픽·블라블라';
     if(id==='x')return '타임라인';
     const generated=validatedBoardTitle(currentBoard().generatedTitle,id);
@@ -1159,6 +1161,8 @@
   function validatedBoardTitle(value,communityId){
     let title=short(value,100).replace(/[\r\n\t]/g,' ').trim();
     if(!title)return '';
+    // Reject misplaced Reddit names for every other community, not only office boards.
+    if(communityId!=='reddit'&&/^r\//i.test(title))return '';
     const identityNames=[data?.settings?.savedProfiles?.user,...safeArray(data?.settings?.savedProfiles?.characters)]
       .map(p=>String(p?.name||'').trim()).filter(Boolean);
     const norm=x=>String(x).toLowerCase().replace(/[^a-z0-9가-힣]/g,'');
@@ -1507,13 +1511,13 @@
     }
     if(!board.started&&kind==='auto')return;clearTimeout(autoTimer);const batchToReplace=kind==='regenerate'?board.lastBatch:null;
     const request={id:uid(),kind,cancelled:false,room,community:data.settings.selected,epoch:runEpoch,request:null};const countedAtStart=turnCount;let succeeded=false;busy=request;reactionTarget=post?.id||'';renderStatus();try{const model=data.settings.model||models[0];
-      if(kind==='manual'&&!['blind','x'].includes(request.community)&&!short(data.settings.boardTitles?.[request.community],100)&&!validatedBoardTitle(board.generatedTitle,request.community)){
+      if(kind==='manual'&&!['blind','x'].includes(request.community)&&!manualBoardTitle(request.community)&&!validatedBoardTitle(board.generatedTitle,request.community)){
         try{
           const namingBody={contents:[{role:'user',parts:[{text:boardTitlePrompt()}]}],generationConfig:{temperature:0.6,responseMimeType:'application/json',maxOutputTokens:256}};
           const naming=parseGemini(await generateWithFallback(key,model,namingBody,request));
           if(request.cancelled||busy!==request||request.room!==room||request.community!==data?.settings.selected||request.epoch!==runEpoch)return;
           const chosen=validatedBoardTitle(naming.boardTitle,request.community);
-          if(chosen&&!short(data.settings.boardTitles?.[request.community],100)&&!validatedBoardTitle(board.generatedTitle,request.community)){board.generatedTitle=chosen;saved();}
+          if(chosen&&!manualBoardTitle(request.community)&&!validatedBoardTitle(board.generatedTitle,request.community)){board.generatedTitle=chosen;saved();}
         }catch(err){if(request.cancelled)return;console.warn('[제타 익명 게시판] 게시판 이름 생성 실패:',err);}
       }
       const prompt=promptPayload(kind,post);const body={contents:[{role:'user',parts:[{text:prompt}]}],generationConfig:{temperature:0.9,responseMimeType:'application/json',maxOutputTokens:8192}};const res=await generateWithFallback(key,model,body,request);if(request.cancelled||busy!==request||request.room!==room||request.community!==data?.settings.selected||request.epoch!==runEpoch)return;const result=parseGemini(res);if(kind==='regenerate'&&batchToReplace&&board.lastBatch!==batchToReplace)throw Error('재생성 대상이 변경되었습니다.');const next=applyResult(result,kind,batchToReplace);if(kind==='manual'||kind==='auto'){turnCount=kind==='auto'?Math.max(0,turnCount-countedAtStart):0;autoStage='';if(kind==='manual'&&baselineReady){const complete=buildTurns(lastRawMessageSnapshot).filter(t=>!t.incomplete);completedTurnTotal=complete.length;const last=complete.at(-1);if(last){activeTurnKey=last.id;activeTurnHash=fingerprint(last);}}}if(kind==='regenerate'){next.temporary=batchToReplace?.temporary||false;saved();}succeeded=true;show('게시판 갱신 완료 · 새 게시글 '+next.created.length+'개');render();}
