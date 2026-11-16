@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.5.12
+// @version      0.5.13
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.5.12', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.5.13', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1482,7 +1482,7 @@
   #zab-panel button.zab-text-action{border:0;background:transparent;padding:3px 5px;min-height:28px;color:var(--zab-muted);font-size:12px}
   #zab-panel .zab-translate-switch{display:flex;align-items:center;gap:2px;justify-content:flex-end;margin:7px 0 12px}
   #zab-panel .zab-translate-switch button{border:0;background:transparent;min-height:28px;padding:5px 9px;color:var(--zab-muted);border-radius:8px;font-size:12px;font-weight:600}
-  #zab-panel .zab-translate-switch button.is-active{color:var(--zab-text);background:var(--zab-surface2)}
+  #zab-panel .zab-translate-switch button.is-active{color:var(--zab-text);background:color-mix(in srgb,var(--zab-accent) 10%,var(--zab-surface))}
   #zab-panel .zab-author-me-name,#zab-panel .zab-author-character-name,#zab-panel[data-theme="dark"] .zab-author-me-name,#zab-panel[data-theme="dark"] .zab-author-character-name{color:var(--zab-text);font-weight:750}
   #zab-panel .zab-author-me,#zab-panel[data-theme="dark"] .zab-author-me{background:var(--zab-accent);color:#fff}
   #zab-panel .zab-author-character,#zab-panel[data-theme="dark"] .zab-author-character{background:color-mix(in srgb,var(--zab-accent) 15%,var(--zab-surface));color:var(--zab-text);border:1px solid color-mix(in srgb,var(--zab-accent) 36%,var(--zab-border))}
