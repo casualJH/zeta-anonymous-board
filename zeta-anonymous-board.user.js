@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.6.2
+// @version      0.6.3
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.6.2', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.6.3', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1384,7 +1384,7 @@
   // Missing RP components are never guessed or merged with other turns.
   function realTimeStamp(){
     const d=new Date(),pad=n=>String(n).padStart(2,'0');
-    return d.getFullYear()+'.'+pad(d.getMonth()+1)+'.'+pad(d.getDate())+' '+(d.getHours()<12?'오전':'오후')+' '+pad(d.getHours()%12||12)+':'+pad(d.getMinutes());
+    return d.getFullYear()+'.'+pad(d.getMonth()+1)+'.'+pad(d.getDate())+' '+pad(d.getHours())+':'+pad(d.getMinutes());
   }
   function statusBlocksOf(turn){
     const blocks=[];
@@ -1411,7 +1411,7 @@
     const meridiemRanges=[];
     for(const m of text.matchAll(ampmRE)){
       const hour=Number(m[2]),minute=Number(m[3]||0),h=(hour%12)+(m[1]==='오후'?12:0);
-      clocks.push({index:m.index,value:(h<12?'오전':'오후')+' '+pad(h%12||12)+':'+pad(minute)});
+      clocks.push({index:m.index,value:pad(h)+':'+pad(minute)});
       meridiemRanges.push([m.index,m.index+m[0].length]);
     }
     const clockRE=/(^|[^\d])([01]?\d|2[0-3])\s*(?::\s*([0-5]\d)|시\s*(?:([0-5]?\d)\s*분)?)/gm;
@@ -1419,7 +1419,7 @@
       const index=m.index+m[1].length;
       if(meridiemRanges.some(([a,b])=>index>=a&&index<b))continue;
       const h=Number(m[2]),minute=Number(m[3]||m[4]||0);
-      clocks.push({index,value:(h<12?'오전':'오후')+' '+pad(h%12||12)+':'+pad(minute)});
+      clocks.push({index,value:pad(h)+':'+pad(minute)});
     }
     dates.sort((a,b)=>a.index-b.index);
     clocks.sort((a,b)=>a.index-b.index);
@@ -1502,6 +1502,7 @@
   #zab-panel label.zab-profile-choice{background:var(--zab-surface2);border-color:var(--zab-border);border-radius:10px;padding:10px}
   #zab-panel .zab-profile-choice small{color:var(--zab-muted)}
   #zab-panel .zab-comment{padding:12px 0;border-color:var(--zab-border)}
+  #zab-panel .zab-section > .zab-comment:last-child{border-bottom:0}
   #zab-panel .zab-reply{border-left-color:var(--zab-accent);margin-left:12px;padding-left:12px}
   #zab-panel .zab-chip{background:var(--zab-surface2);color:var(--zab-accent);border-radius:6px;font-weight:700}
   #zab-panel .zab-footer{background:var(--zab-surface);border-color:var(--zab-border);padding:9px 12px}
