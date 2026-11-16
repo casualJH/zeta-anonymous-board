@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.10.2
+// @version      0.10.3
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.10.2', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.10.3', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -443,7 +443,7 @@
     if(generated)return generated;
     if(id==='everytime')return '자유게시판';
     if(id==='gallery')return '갤러리';
-    if(id==='office')return '조직·직업 익명 게시판';
+    if(id==='office')return '익명 게시판';
     if(id==='reddit')return 'r/CasualConversation';
     if(id==='neighborhood')return '우리동네 수다방';
     return currentCommunity().name;
@@ -1130,7 +1130,7 @@
       gallery:'Create a natural Korean DC Inside-style gallery TOPIC inclusive of both the user and all selected characters, preserving Korean gallery naming style. Prefer a confirmed common parent affiliation, then genuinely shared interests, activities or living environment, then a broad established world topic. Do not use only the user\'s occupation (e.g. veterinarian) or only some characters\' species as the whole gallery topic when other participants are excluded. Do not invent a shared relationship such as the veterinarian treating those characters. Prefer a broad world topic over an invented connection. Return ONLY the topic without " 갤러리"; e.g. 해외 축구, 대학생.',
       neighborhood:'Invent a natural Korean neighborhood-based NAVER CAFE name for a shared space of the user and all selected characters, not just a place name. Prefer a confirmed common location or living environment; otherwise choose an inclusive broad local-life theme rather than inventing a shared address or focusing on one participant\'s occupation, nationality, species or hobby. Freely choose the cafe name; "천호동 · 동네 이야기" is just one possible format, not a location to assume. Do not claim an unconfirmed real neighborhood exists. The name must sound like a local residents cafe (neighborhood, neighbors, residents, village, apartment, local moms, local chat or community).',
       reddit:'Create a natural English subreddit TOPIC/name that inclusively represents the USER and ALL SELECTED CHARACTERS, based ONLY on the supplied saved profiles, world setting and instructions. Choose the theme in this strict priority: (1) a confirmed COMMON PARENT AFFILIATION such as the same university, employer, school or organization, even when individual departments, majors, professions or nationalities differ; (2) if no common parent affiliation exists, a genuinely shared interest, professional field or activity (e.g. a Korean entertainer and a Russian actor may share the entertainment industry without implying they know or work with each other); (3) if neither exists, a broad topic representing the overall established world setting. Prefer the most inclusive confirmed commonality, not a detail unique to the user or one character. Never make up a shared affiliation, relationship or activity to manufacture a theme. A shared university UCM with a media major and a sports major should yield a university-wide concept such as UCMStudents, NOT UCMMedia. Express the concept as a concise natural English subreddit name. Return ONLY 3-21 ASCII letters, digits or underscores; the script adds r/. Never use character or user real names.',
-      office:'This platform is an internal organization or occupational-field anonymous board, NOT restricted to private companies. All selected characters and the user must be able to participate without inventing their affiliations. Priority: (1) if all share a CONFIRMED real-in-world parent organization (company, military unit, fire station, police station, hospital, school or public institution), return ONLY that explicitly established exact organization name; (2) if they lack a single confirmed shared organization but share a confirmed professional sector, return a natural Korean occupational-group title such as 소방관 익명 게시판 or 군인 익명 게시판 (examples, not facts to invent); (3) otherwise return a broad, natural Korean cross-occupation workplace title such as 일터 익명 게시판. Never invent a named unit, workplace, station, employer, or common relationship. Never claim that users of the same profession belong to the same particular organization. Avoid any title focused on only one participant. Return ONLY the final Korean board title.',
+      office:'This is a shared anonymous board for the USER AND ALL SELECTED CHARACTERS. Use EXACTLY this decision tree. STEP 1: Find an explicitly confirmed COMMON organization, including an explicitly confirmed shared parent organization even if their teams/subunits differ. It can be a company, private special operations team, military unit, fire station, hospital, public agency, etc. If confirmed for ALL participants, output its exact organization name followed by " 익명 게시판" (e.g. 블랙팀 익명 게시판). Do not choose a subunit shared by only some participants or invent an organizational hierarchy. STEP 2: If NO confirmed common organization exists, infer the common occupation or professional sector of ALL participants using BOTH explicitly stated jobs AND the clearly established meaning of their organizational affiliations. Examples: 소속: 제1부대 and 소속: 제2중대 may support the military field even when the word 군인 does not occur; different fire stations may support the firefighter field. A department or unit label alone does NOT prove that two differently named units belong to one common organization. Do NOT invent a more specific job, rank or license based merely on affiliation. Only when a genuinely common professional field is supported for ALL participants, output "<공통 직업군> 익명 게시판" (e.g. 군인 익명 게시판 or 소방관 익명 게시판). STEP 3: If neither a common organization nor a supported common professional field exists for all participants, output EXACTLY "익명 게시판", not 일터 익명 게시판 or a user-specific topic. Never fabricate a common employer, unit, job, profession, relationship or activity. The output must be a natural Korean board name with exactly one 익명 게시판 suffix. Do not include names of users or characters.',
       blind:'Return empty boardTitle. This community always uses the fixed title "토픽·블라블라".',
       x:'Return empty boardTitle. This community always uses the fixed title "타임라인".'
     };
@@ -1139,7 +1139,7 @@
       'Never use RP dialogue, chat history, scene events, existing posts, rumors or resident activity. These are not supplied to you.',
       'Do not name a community after any user or character, even if their name is prominent. Do not make a fan community.',
       'COMMON COMMUNITY OWNERSHIP PRINCIPLE: These communities are spaces shared by the USER AND ALL SELECTED CHARACTERS, not a personal community of any one participant. For freely generated community names/topics, prioritize (1) a confirmed common parent affiliation such as school, employer or organization; (2) genuinely shared interests, activities, occupational field or living environment; (3) a broad theme of the established world when neither commonality exists. Different majors, occupations, nationalities or species can still share a broader confirmed theme. Do not choose a topic belonging only to the user or only some characters, force an unconfirmed connection, or invent common affiliations, relationships or activities. Keep every platform\'s native naming style and mandatory constraints.',
-      'MANDATORY PLATFORM EXCEPTIONS: Everytime must use an explicitly confirmed university name only or return empty. Office prioritizes the explicitly confirmed common organization; when there is none, use an inclusive occupational-field or broad workplace board title WITHOUT inventing any named employer or unit. Blind and X keep their fixed titles. Do not invent institutions to satisfy shared-topic naming.',
+      'MANDATORY PLATFORM EXCEPTIONS: Everytime must use an explicitly confirmed university name only or return empty. Office follows precisely: common confirmed organization name + 익명 게시판; otherwise a genuinely shared inferred professional field + 익명 게시판; otherwise exactly 익명 게시판. Never invent a shared employer or unit. Blind and X keep their fixed titles.',
       'Platform-specific mandatory rule: '+(formats[com.id]||'Create a natural board name suited to this custom community description.'),
       'Return exactly one JSON object {"boardTitle":"..."} and nothing else.'
     ].join('\n');
@@ -1169,25 +1169,27 @@
       return university?short(university+' 자유게시판',100):'';
     }
     if(communityId==='office'){
-      if(/^(?:officeworkers?|officeculture|workplace|companytalk)$/i.test(title)||/^(?:회사|기업|직장|사무실|조직|우리 회사)$/i.test(title))return '';
-      // Gemini chooses the name. Only validate the format and whether a specific
-      // organization was really mentioned; do not require UI suffixes in profiles.
-      const genericOfficeTopic=/^(?:소방관|소방직|소방|군인|군생활|경찰관|경찰|의료진|의료인|의료|간호사|의사|공무원|교직원|교사|교육계|직장인|직업인|직업군|근무자|현장직|일터|업무생활|직장생활|공공안전|안전직|공공기관직원|공무직|직장인들|사회생활|직업생활|직장인들의\s*일상|조직[·\\s]*직업)\s*익명\s*게시판$/;
-      if(genericOfficeTopic.test(title))return title;
-      // e.g. "블랙팀 익명 게시판" -> "블랙팀"; "블랙팀 내부 게시판" -> "블랙팀".
-      const organization=title.replace(/\s*(?:(?:내부\s*)?익명\s*게시판|내부\s*게시판|게시판)$/,'').trim();
-      if(!organization||organization===title&&/게시판$/.test(title))return '';
-      const clean=value=>String(value||'').normalize('NFKC').toLowerCase().replace(/[\s·ㆍ._-]+/g,'');
-      const target=clean(organization);
-      if(target.length<2)return '';
+      if(title==='익명 게시판')return title;
+      if(/^(?:officeworkers?|officeculture|workplace|companytalk)$/i.test(title))return '';
+      const suffix=/\s*익명\s*게시판$/;
+      if(!suffix.test(title))return '';
+      const subject=title.replace(suffix,'').trim();
+      if(!subject||subject.length>60)return '';
+      // Gemini selects the professional field. This list also accepts field names
+      // inferred from a unit (e.g. battalion => military) without claiming a shared unit.
+      const profession=/^(?:소방관|소방직|소방|군인|군생활|군|군사|군무원|경찰관|경찰|의료진|의료인|의료|간호사|의사|응급구조사|구급대원|공무원|교직원|교사|교육계|직장인|직업인|직업군|근무자|현장직|공공안전|안전직|공공기관직원|공무직|연예인|연예계|배우|방송인|개발자|디자이너|연구원|연구직|공학기술자|기술직|제조업|운수업|서비스업|사회복지사|복지직|법조인|법률직|금융인|금융업|건설업|농업인|수의사|수의료인|체육인|운동선수|예술인|예술계)$/;
+      if(profession.test(subject))return subject+' 익명 게시판';
+      // A specific organization is accepted only when its name is grounded in
+      // saved profiles/world and appears in a contextual affiliation statement.
       const sources=[...worldTitleTexts(),String(data?.settings?.guide||''),String(data?.settings?.communityGuides?.office||'')];
-      // Requires a contextual organization mention, not merely a similar word
-      // or a profession. The overall shared affiliation is still Gemini's decision.
+      const clean=value=>String(value||'').normalize('NFKC').toLowerCase().replace(/[\s·ㆍ._-]+/g,'');
+      const target=clean(subject);
+      if(target.length<2)return '';
       const organizationContext=/(?:회사명|회사|기업명|기업|소속|근무처|근무지|재직|직장|직원|사원|고용주|부대|사단|여단|연대|대대|중대|소대|사령부|군부대|소방서|소방본부|119안전센터|경찰서|지구대|파출소|병원|의료원|학교|기관|조직|작전팀|특수임무|팀장|station|unit|battalion|brigade|regiment|hospital|department|organization|company|employer|employed|works?\s+at)/i;
       const grounded=sources.some(source=>String(source||'').split(/[\n.!?。！？;]+/).some(segment=>
         clean(segment).includes(target)&&organizationContext.test(segment)
       ));
-      return grounded?title:'';
+      return grounded?subject+' 익명 게시판':'';
     }
     if(communityId==='gallery'){
       title=title.replace(/\s*갤러리$/,'').trim();
@@ -1210,7 +1212,7 @@
   function promptPayload(kind,post){const b=currentBoard(),s=data.settings,community=currentCommunity(),recent=observedTurns.slice(-Math.max(10,num(s.turns,1,999,1)+5)).map((t,i)=>({turn:i+1,content:t.parts.map(p=>`${p.speaker} (${p.role}): ${short(p.text,1300)}`).join('\n').slice(0,4500)}));const older=b.posts.slice(-num(s.oldPostWindow,0,300,20)).map(p=>({id:p.id,title:p.title,body:short(p.body,850),comments:p.comments.slice(-12).map(c=>({id:c.id,author:community.id==='gallery'?galleryDisplayNick(c):c.nick,source:c.source||'ai',text:short(c.text,450),replies:safeArray(c.replies).slice(-5).map(r=>({id:r.id,author:community.id==='gallery'?galleryDisplayNick(r):r.nick,source:r.source||'ai',text:short(r.text,220)}))}))}));const residents=Object.values(b.residents).slice(-40);
     const communityRules=community.id==='gallery'?'갤러리에서는 세계관에 맞는 주제와 관심사를 다루고, 짧은 반말과 한국 인터넷 갤러리식 표현을 상황에 맞게 자연스럽게 사용하라. Gemini가 일회성 AI 주민의 유동닉 ㅇㅇ(가상 IP)와 반복 등장하는 고정 주민·RP 캐릭터의 창의적인 익명 고정닉을 모두 직접 생성하라. 반고닉은 사용하지 않는다. 가상 IP는 실제 IP를 수집하거나 추측하지 말고 창작하라. 유저는 기본 유동닉이며 직접 닉네임을 지정하면 고정닉이다. 실제 IP를 수집하거나 추측하지 마라.':community.id==='blind'?
       '블라인드는 여러 회사의 직원이 참여하는 외부 직장인 커뮤니티다. 현재 RP 회사의 사내 게시판이 아니다. 서로 다른 업종·회사에 다니는 글쓴이들을 혼합하고 새 글의 과반수는 현재 RP 중심 회사와 무관한 다른 회사의 직장 생활·업계 이야기를 다뤄라. 필요한 경우 가상의 회사명을 자연스럽게 창작해도 되나, 개인에 대한 사실로 단정하지 마라. 게시글/댓글 작성자의 회사명과 별명은 Gemini가 직접 결정하라. 일반 AI 주민의 회사는 세계관에 맞게 창작할 수 있지만 유저·RP 캐릭터의 회사는 명시적으로 확인된 소속만 사용하라. 확인되지 않은 소속은 창작하지 말고 company는 빈 문자열로 두며 닉네임의 회사 자리는 소속미확인으로 표시하라. 닉네임은 회사명 · 개성 있는 익명 별명 형태로 작성하라(예: 대한그룹 · 퇴사각재는중, 한빛전자 · 칼퇴하고싶다). 회사명 자리에 부서명·직급·팀명을 절대 넣지 말고, 실명·프로필 이름·익명직장인 같은 고정 이름을 사용하지 마라. 같은 주민 residentId는 회사와 닉네임을 유지하고, 다른 주민은 회사·별명을 다양하게 만들어라. 게시글과 댓글 JSON에 company 필드를 회사명으로 함께 제공하라. 특정 회사 내부에서만 알 수 있는 정보는 외부인이 본 것처럼 단정하지 마라.':community.id==='office'?
-      '사내 익명 게시판은 회사뿐 아니라 군부대·소방서·경찰서·병원·공공기관 등 조직 내부 또는 공통 직업 분야의 익명 게시판이다. 유저와 선택된 캐릭터 전원이 함께 이용할 수 있는 범위를 지켜라. 모두가 같은 조직에 속한다는 사실이 확인되면 그 조직 구성원의 내부 일상과 공개 가능한 업무 이야기를 다룬다. 같은 조직이 확인되지 않고 공통 직업 분야만 확인되면 서로 다른 소속일 수 있는 해당 직업군의 경험과 의견을 다루며 같은 부대·소방서·회사에서 일한다고 가정하지 마라. 공통 직업 분야도 없으면 넓은 일터·업무 생활 주제를 다루고 특정 직업에 편중되지 마라. 게시글·댓글·대댓글의 nick은 확인된 부서/팀/부대/직무 등 소속 또는 역할 · 개성 있는 익명 별명 형태로 작성하라(예: 구매팀 · 퇴근요정, 구조대 · 커피수혈중, 소방관 · 야간근무중). 실제 프로필에서 확인되지 않은 특정 부서·부대·계급·근무지를 지어내지 마라. 구체적 소속이나 역할을 모르면 소속미상 · 별명으로 표시하라. 유저·RP 캐릭터의 회사명·조직명·직책·직무는 실제 확인된 정보만 사용하라. 캐릭터 실명은 닉네임에 사용하지 말고 같은 residentId의 닉네임을 유지하라. 외부 여러 회사의 직원이 이용하는 블라인드와 동일하게 다루지 마라.':
+      '사내 익명 게시판은 회사뿐 아니라 군부대·소방서·경찰서·병원·공공기관 등 조직 내부 또는 공통 직업 분야의 익명 게시판이다. 유저와 선택된 캐릭터 전원이 함께 이용할 수 있는 범위를 지켜라. 모두가 같은 조직에 속한다는 사실이 확인되면 그 조직 구성원의 내부 일상과 공개 가능한 업무 이야기를 다룬다. 같은 조직이 확인되지 않고 공통 직업 분야만 확인되면 서로 다른 소속일 수 있는 해당 직업군의 경험과 의견을 다루며 같은 부대·소방서·회사에서 일한다고 가정하지 마라. 공통 직업 분야도 없으면 특정 직업에 편중되지 않는 익명 게시판으로 운영하라. 직업명이 직접 없더라도 부대·중대·대대 같은 소속 단서로 공통 군 직업군을 합리적으로 유추할 수 있지만, 서로 다른 소속을 같은 조직으로 간주하거나 직급·세부 직업을 단정하지 마라. 게시글·댓글·대댓글의 nick은 확인된 부서/팀/부대/직무 등 소속 또는 역할 · 개성 있는 익명 별명 형태로 작성하라(예: 구매팀 · 퇴근요정, 구조대 · 커피수혈중, 소방관 · 야간근무중). 실제 프로필에서 확인되지 않은 특정 부서·부대·계급·근무지를 지어내지 마라. 구체적 소속이나 역할을 모르면 소속미상 · 별명으로 표시하라. 유저·RP 캐릭터의 회사명·조직명·직책·직무는 실제 확인된 정보만 사용하라. 캐릭터 실명은 닉네임에 사용하지 말고 같은 residentId의 닉네임을 유지하라. 외부 여러 회사의 직원이 이용하는 블라인드와 동일하게 다루지 마라.':
       '';
     const nicknameRules={
       gallery:'갤러리: Gemini가 일회성 AI 주민의 ㅇㅇ(창작 가상 IP) 유동닉과 반복 주민·RP 캐릭터의 고정닉을 직접 창작하라. 유저 닉네임도 별도 Gemini 생성 결과 또는 직접 설정값을 따른다. 반고닉 없음.',
