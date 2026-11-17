@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.10.9
+// @version      0.10.10
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.10.9', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.10.10', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -41,7 +41,7 @@
     {id:'neighborhood',name:'동네 게시판',desc:'동네 생활, 목격담과 지역 정보',nick:'동네산책러, 이웃주민',style:'주민 카페 말투'},
     {id:'gallery',name:'갤러리',desc:'세계관에 어울리는 관심사와 일상을 나누는 한국어 게시판',nick:'ㅇㅇ(가상 IP), 고정닉',style:'자연스러운 반말과 갤러리식 표현'}
   ];
-  const defaults=()=>({timeMode:'real',auto:true,showParticipationDot:true,highlightPostAuthor:true,turns:3,autoDelaySeconds:10,posts:3,newComments:7,oldComments:10,oldPostWindow:20,quiet:'daily',model:'gemini-3.5-flash-lite',fallback:'gemini-3.1-flash-lite',temperature:0.9,guide:'',communityGuides:{},userNickMode:'auto',userNick:'',selected:'everytime',boardTitles:{},topTitles:{},translationEnabled:{reddit:true},galleryDescription:'',communityConfirmed:false,custom:[],status:'',profiles:{user:'',characters:'',world:''},profileSelection:{userId:'',characterIds:[]},savedProfiles:null});
+  const defaults=()=>({timeMode:'real',auto:true,showParticipationDot:true,highlightPostAuthor:true,turns:5,autoDelaySeconds:10,posts:3,newComments:7,oldComments:10,oldPostWindow:20,quiet:'daily',model:'gemini-3.5-flash-lite',fallback:'gemini-3.1-flash-lite',temperature:0.9,guide:'',communityGuides:{},userNickMode:'auto',userNick:'',selected:'everytime',boardTitles:{},topTitles:{},translationEnabled:{reddit:true},galleryDescription:'',communityConfirmed:false,custom:[],status:'',profiles:{user:'',characters:'',world:''},profileSelection:{userId:'',characterIds:[]},savedProfiles:null});
   const now=()=>Date.now(), uid=()=> (crypto.randomUUID?.()||'id-'+now().toString(36)+'-'+Math.random().toString(36).slice(2));
   const num=(x,min,max,d)=>{const n=Number(x);return Number.isFinite(n)?Math.max(min,Math.min(max,Math.trunc(n))):d;};
   const copy=x=>JSON.parse(JSON.stringify(x));
