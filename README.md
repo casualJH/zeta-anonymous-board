@@ -1,6 +1,7 @@
 # 제타 익명 게시판
 
 제타 웹 채팅방에 RP 세계관을 바탕으로 한 익명 게시판을 추가하는 Tampermonkey 스크립트입니다. 글을 직접 쓰거나 Gemini로 가상의 게시글과 댓글을 생성할 수 있습니다.
+설명 보러가기 : https://casualjh.github.io/zeta-anonymous-board/
 
 ## 설치하기
 
