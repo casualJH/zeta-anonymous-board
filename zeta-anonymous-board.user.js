@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         제타 익명 게시판
 // @namespace    zeta-anonymous-board
-// @version      0.10.10
+// @version      0.10.11
 // @description  RP 세계관 속 커뮤니티 게시글·댓글 생성, 자동 턴 갱신, 수동 작성, 커뮤니티별 저장
 // @author       casualJH
 // @match        https://zeta-ai.io/*
@@ -22,7 +22,7 @@
   'use strict';
   if (window.__zetaAnonymousBoardV1) return;
   window.__zetaAnonymousBoardV1 = true;
-  const VERSION='0.10.10', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
+  const VERSION='0.10.11', DB='zeta-anonymous-board-v1', API='https://api.zeta-ai.io';
   const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
   // Recommendations are candidates based on the user-provided comparison, not verified quotas.
   // Actual model availability and free-tier limits depend on the API key and project.
@@ -1228,7 +1228,7 @@
     }
     return title;
   }
-  function promptPayload(kind,post){const b=currentBoard(),s=data.settings,community=currentCommunity(),recent=observedTurns.slice(-Math.max(10,num(s.turns,1,999,1)+5)).map((t,i)=>({turn:i+1,content:t.parts.map(p=>`${p.speaker} (${p.role}): ${short(p.text,1300)}`).join('\n').slice(0,4500)}));const older=b.posts.slice(-num(s.oldPostWindow,0,300,20)).map(p=>({id:p.id,title:p.title,body:short(p.body,850),comments:p.comments.slice(-12).map(c=>({id:c.id,author:community.id==='gallery'?galleryDisplayNick(c):c.nick,source:c.source||'ai',text:short(c.text,450),replies:safeArray(c.replies).slice(-5).map(r=>({id:r.id,author:community.id==='gallery'?galleryDisplayNick(r):r.nick,source:r.source||'ai',text:short(r.text,220)}))}))}));const residents=Object.values(b.residents).slice(-40);
+  function promptPayload(kind,post){const b=currentBoard(),s=data.settings,community=currentCommunity(),recent=observedTurns.slice(-(kind==='manual'?30:Math.max(10,num(s.turns,1,999,1)+5))).map((t,i)=>({turn:i+1,content:t.parts.map(p=>`${p.speaker} (${p.role}): ${short(p.text,1300)}`).join('\n').slice(0,4500)}));const older=b.posts.slice(-num(s.oldPostWindow,0,300,20)).map(p=>({id:p.id,title:p.title,body:short(p.body,850),comments:p.comments.slice(-12).map(c=>({id:c.id,author:community.id==='gallery'?galleryDisplayNick(c):c.nick,source:c.source||'ai',text:short(c.text,450),replies:safeArray(c.replies).slice(-5).map(r=>({id:r.id,author:community.id==='gallery'?galleryDisplayNick(r):r.nick,source:r.source||'ai',text:short(r.text,220)}))}))}));const residents=Object.values(b.residents).slice(-40);
     const communityRules=community.id==='gallery'?'갤러리에서는 세계관에 맞는 주제와 관심사를 다루고, 짧은 반말과 한국 인터넷 갤러리식 표현을 상황에 맞게 자연스럽게 사용하라. Gemini가 일회성 AI 주민의 유동닉 ㅇㅇ(가상 IP)와 반복 등장하는 고정 주민·RP 캐릭터의 창의적인 익명 고정닉을 모두 직접 생성하라. 반고닉은 사용하지 않는다. 가상 IP는 실제 IP를 수집하거나 추측하지 말고 창작하라. 유저는 기본 유동닉이며 직접 닉네임을 지정하면 고정닉이다. 실제 IP를 수집하거나 추측하지 마라.':community.id==='blind'?
       '블라인드는 여러 회사의 직원이 참여하는 외부 직장인 커뮤니티다. 현재 RP 회사의 사내 게시판이 아니다. 서로 다른 업종·회사에 다니는 글쓴이들을 혼합하고 새 글의 과반수는 현재 RP 중심 회사와 무관한 다른 회사의 직장 생활·업계 이야기를 다뤄라. 필요한 경우 가상의 회사명을 자연스럽게 창작해도 되나, 개인에 대한 사실로 단정하지 마라. 게시글/댓글 작성자의 회사명과 별명은 Gemini가 직접 결정하라. 일반 AI 주민의 회사는 세계관에 맞게 창작할 수 있지만 유저·RP 캐릭터의 회사는 명시적으로 확인된 소속만 사용하라. 확인되지 않은 소속은 창작하지 말고 company는 빈 문자열로 두며 닉네임의 회사 자리는 소속미확인으로 표시하라. 닉네임은 회사명 · 개성 있는 익명 별명 형태로 작성하라(예: 대한그룹 · 퇴사각재는중, 한빛전자 · 칼퇴하고싶다). 회사명 자리에 부서명·직급·팀명을 절대 넣지 말고, 실명·프로필 이름·익명직장인 같은 고정 이름을 사용하지 마라. 같은 주민 residentId는 회사와 닉네임을 유지하고, 다른 주민은 회사·별명을 다양하게 만들어라. 게시글과 댓글 JSON에 company 필드를 회사명으로 함께 제공하라. 특정 회사 내부에서만 알 수 있는 정보는 외부인이 본 것처럼 단정하지 마라.':community.id==='office'?
       '사내 익명 게시판은 회사뿐 아니라 군부대·소방서·경찰서·병원·공공기관 등 조직 내부 또는 공통 직업 분야의 익명 게시판이다. 유저와 선택된 캐릭터 전원이 함께 이용할 수 있는 범위를 지켜라. 모두가 같은 조직에 속한다는 사실이 확인되면 그 조직 구성원의 내부 일상과 공개 가능한 업무 이야기를 다룬다. 같은 조직이 확인되지 않고 공통 직업 분야만 확인되면 서로 다른 소속일 수 있는 해당 직업군의 경험과 의견을 다루며 같은 부대·소방서·회사에서 일한다고 가정하지 마라. 공통 직업 분야도 없으면 특정 직업에 편중되지 않는 익명 게시판으로 운영하라. 직업명이 직접 없더라도 부대·중대·대대 같은 소속 단서로 공통 군 직업군을 합리적으로 유추할 수 있지만, 서로 다른 소속을 같은 조직으로 간주하거나 직급·세부 직업을 단정하지 마라. 게시글·댓글·대댓글의 nick은 확인된 부서/팀/부대/직무 등 소속 또는 역할 · 개성 있는 익명 별명 형태로 작성하라(예: 구매팀 · 퇴근요정, 구조대 · 커피수혈중, 소방관 · 야간근무중). 실제 프로필에서 확인되지 않은 특정 부서·부대·계급·근무지를 지어내지 마라. 일반 AI 주민에게는 Gemini가 세계관에 어울리는 소속·부서·직무를 창작할 수 있다. 유저·선택 캐릭터의 조직·직무 정보는 실제 프로필에 근거해야 한다. 소속미상, 부서미상, 일반인, 별명 단독 형식은 금지한다. 유저·RP 캐릭터의 회사명·조직명·직책·직무는 실제 확인된 정보만 사용하라. 캐릭터 실명은 닉네임에 사용하지 말고 같은 residentId의 닉네임을 유지하라. 외부 여러 회사의 직원이 이용하는 블라인드와 동일하게 다루지 마라.':
